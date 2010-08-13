@@ -83,9 +83,10 @@ from celery.worker.control import ControlDispatch
 from celery.worker.heartbeat import Heart
 from celery.events import EventDispatcher
 from celery.messaging import establish_connection
-from celery.messaging import get_consumer_set, BroadcastConsumer
+from celery.messaging import get_consumer_set
 from celery.exceptions import NotRegistered
 from celery.datastructures import SharedCounter
+from celery.worker import state as worker_state
 
 RUN = 0x1
 CLOSE = 0x2
@@ -173,10 +174,10 @@ class CarrotListener(object):
 
         Initial QoS prefetch count for the task channel.
 
-    .. attribute:: control_dispatch
+    .. attribute:: mailbox
 
-        Control command dispatcher.
-        See :class:`celery.worker.control.ControlDispatch`.
+        Process mailbox
+        See :class:`kombu.pidbox.Mailbox`.
 
     .. attribute:: event_dispatcher
 
@@ -209,9 +210,10 @@ class CarrotListener(object):
         self.event_dispatcher = None
         self.heart = None
         self.pool = pool
-        self.control_dispatch = ControlDispatch(logger=logger,
-                                                hostname=self.hostname,
-                                                listener=self)
+        self.mailbox = get_mailbox(logger=logger,
+                                   hostname=self.hostname,
+                                   listener=self,
+                                   worker=worker_state)
         self.connection_errors = establish_connection().connection_errors
 
     def start(self):
@@ -269,7 +271,7 @@ class CarrotListener(object):
 
     def on_control(self, control):
         """Handle received remote control command."""
-        return self.control_dispatch.dispatch_from_message(control)
+        return self.mailbox.dispatch_from_message(control)
 
     def receive_message(self, message_data, message):
         """The callback called when a new message is received. """
@@ -294,7 +296,7 @@ class CarrotListener(object):
             return
 
         # Handle control command
-        control = message_data.get("control")
+        control = message_data.get("method")
         if control:
             return self.on_control(control)
 
@@ -364,8 +366,6 @@ class CarrotListener(object):
         self.qos.update() # enable prefetch_count QoS.
 
         self.task_consumer.on_decode_error = self.on_decode_error
-        self.broadcast_consumer = BroadcastConsumer(self.connection,
-                                                    hostname=self.hostname)
         self.task_consumer.register_callback(self.receive_message)
         self.event_dispatcher = EventDispatcher(self.connection,
                                                 hostname=self.hostname,
@@ -376,9 +376,11 @@ class CarrotListener(object):
         self._state = RUN
 
     def _mainloop(self):
-        self.broadcast_consumer.register_callback(self.receive_message)
+        broadcast_channel = self.connection.channel()
+        self.broadcast_consumer = self.mailbox.listen(broadcast_channel,
+                                                      self.hostname,
+                                                      self.receive_message)
         self.task_consumer.consume()
-        self.broadcast_consumer.consume()
         while 1:
             yield self.connection.drain_events()
 

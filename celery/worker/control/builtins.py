@@ -12,8 +12,7 @@ from celery.worker.control.registry import Panel
 TASK_INFO_FIELDS = ("exchange", "routing_key", "rate_limit")
 
 
-@Panel.register
-def revoke(panel, task_id, task_name=None, **kwargs):
+def revoke(state, task_id, task_name=None, **kwargs):
     """Revoke task by task id."""
     revoked.add(task_id)
     backend = default_backend
@@ -23,34 +22,31 @@ def revoke(panel, task_id, task_name=None, **kwargs):
         except KeyError:
             pass
     backend.mark_as_revoked(task_id)
-    panel.logger.warn("Task %s revoked" % (task_id, ))
+    state.logger.warn("Task %s revoked" % (task_id, ))
     return {"ok": "task %s revoked" % (task_id, )}
 
 
-@Panel.register
-def enable_events(panel):
-    dispatcher = panel.listener.event_dispatcher
+def enable_events(state):
+    dispatcher = state.listener.event_dispatcher
     if not dispatcher.enabled:
         dispatcher.enable()
         dispatcher.send("worker-online")
-        panel.logger.warn("Events enabled by remote.")
+        state.logger.warn("Events enabled by remote.")
         return {"ok": "events enabled"}
     return {"ok": "events already enabled"}
 
 
-@Panel.register
-def disable_events(panel):
-    dispatcher = panel.listener.event_dispatcher
+def disable_events(state):
+    dispatcher = state.listener.event_dispatcher
     if dispatcher.enabled:
         dispatcher.send("worker-offline")
         dispatcher.disable()
-        panel.logger.warn("Events disabled by remote.")
+        state.logger.warn("Events disabled by remote.")
         return {"ok": "events disabled"}
     return {"ok": "events already disabled"}
 
 
-@Panel.register
-def set_loglevel(panel, loglevel=None):
+def set_loglevel(state, loglevel=None):
     if loglevel is not None:
         if not isinstance(loglevel, int):
             loglevel = conf.LOG_LEVELS[loglevel.upper()]
@@ -58,8 +54,7 @@ def set_loglevel(panel, loglevel=None):
     return {"ok": loglevel}
 
 
-@Panel.register
-def rate_limit(panel, task_name, rate_limit, **kwargs):
+def rate_limit(state, task_name, rate_limit, **kwargs):
     """Set new rate limit for a task type.
 
     See :attr:`celery.task.base.Task.rate_limit`.
@@ -77,31 +72,30 @@ def rate_limit(panel, task_name, rate_limit, **kwargs):
     try:
         tasks[task_name].rate_limit = rate_limit
     except KeyError:
-        panel.logger.error("Rate limit attempt for unknown task %s" % (
+        state.logger.error("Rate limit attempt for unknown task %s" % (
             task_name, ))
         return {"error": "unknown task"}
 
     if conf.DISABLE_RATE_LIMITS:
-        panel.logger.error("Rate limit attempt, but rate limits disabled.")
+        state.logger.error("Rate limit attempt, but rate limits disabled.")
         return {"error": "rate limits disabled"}
 
-    panel.listener.ready_queue.refresh()
+    state.listener.ready_queue.refresh()
 
     if not rate_limit:
-        panel.logger.warn("Disabled rate limits for tasks of type %s" % (
+        state.logger.warn("Disabled rate limits for tasks of type %s" % (
                             task_name, ))
         return {"ok": "rate limit disabled successfully"}
 
-    panel.logger.warn("New rate limit for tasks of type %s: %s." % (
+    state.logger.warn("New rate limit for tasks of type %s: %s." % (
                 task_name, rate_limit))
     return {"ok": "new rate limit set successfully"}
 
 
-@Panel.register
-def dump_schedule(panel, safe=False, **kwargs):
-    schedule = panel.listener.eta_schedule
+def dump_schedule(state, safe=False, **kwargs):
+    schedule = state.listener.eta_schedule
     if not schedule.queue:
-        panel.logger.info("--Empty schedule--")
+        state.logger.info("--Empty schedule--")
         return []
 
     formatitem = lambda (i, item): "%s. %s pri%s %r" % (i,
@@ -109,7 +103,7 @@ def dump_schedule(panel, safe=False, **kwargs):
             item["priority"],
             item["item"])
     info = map(formatitem, enumerate(schedule.info()))
-    panel.logger.info("* Dump of current schedule:\n%s" % (
+    state.logger.info("* Dump of current schedule:\n%s" % (
                             "\n".join(info, )))
     scheduled_tasks = []
     for item in schedule.info():
@@ -119,38 +113,34 @@ def dump_schedule(panel, safe=False, **kwargs):
     return scheduled_tasks
 
 
-@Panel.register
-def dump_reserved(panel, safe=False, **kwargs):
-    ready_queue = panel.listener.ready_queue
+def dump_reserved(state, safe=False, **kwargs):
+    ready_queue = state.listener.ready_queue
     reserved = ready_queue.items
     if not reserved:
-        panel.logger.info("--Empty queue--")
+        state.logger.info("--Empty queue--")
         return []
-    panel.logger.info("* Dump of currently reserved tasks:\n%s" % (
+    state.logger.info("* Dump of currently reserved tasks:\n%s" % (
                             "\n".join(map(repr, reserved), )))
     return [request.info(safe=safe)
             for request in reserved]
 
 
-@Panel.register
-def dump_active(panel, safe=False, **kwargs):
+def dump_active(state, safe=False, **kwargs):
     return [request.info(safe=safe)
-                for request in state.active_requests]
+                for request in state.worker.active_requests]
 
 
 @Panel.register
-def stats(panel, **kwargs):
-    return {"total": state.total_count,
-            "pool": panel.listener.pool.info}
+def stats(state, **kwargs):
+    return {"total": state.worker.total_count,
+            "pool": state.listener.pool.info}
 
 
-@Panel.register
-def dump_revoked(panel, **kwargs):
-    return list(state.revoked)
+def dump_revoked(state, **kwargs):
+    return list(state.worker.revoked)
 
 
-@Panel.register
-def dump_tasks(panel, **kwargs):
+def dump_tasks(state, **kwargs):
 
     def _extract_info(task):
         fields = dict((field, str(getattr(task, field, None)))
@@ -163,18 +153,16 @@ def dump_tasks(panel, **kwargs):
 
     info = map(_extract_info, (tasks[task]
                                         for task in sorted(tasks.keys())))
-    panel.logger.warn("* Dump of currently registered tasks:\n%s" % (
+    state.logger.warn("* Dump of currently registered tasks:\n%s" % (
                 "\n".join(info)))
 
     return info
 
 
-@Panel.register
-def ping(panel, **kwargs):
+def ping(state, **kwargs):
     return "pong"
 
 
-@Panel.register
-def shutdown(panel, **kwargs):
-    panel.logger.critical("Got shutdown from remote.")
+def shutdown(state, **kwargs):
+    state.logger.critical("Got shutdown from remote.")
     raise SystemExit("Got shutdown from remote")
