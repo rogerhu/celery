@@ -3,6 +3,7 @@ from __future__ import generators
 import socket
 import warnings
 from datetime import datetime
+from Queue import Queue, Empty
 
 from dateutil.parser import parse as parse_iso8601
 from carrot.connection import AMQPConnectionException
@@ -79,12 +80,15 @@ class CarrotListener(object):
 
     def __init__(self, ready_queue, eta_schedule, logger,
             init_callback=noop, send_events=False, hostname=None,
-            initial_prefetch_count=2):
+            initial_prefetch_count=2, pool=None):
         self.connection = None
+        self.pool = pool
+        self.pool.consumer = self
         self.task_consumer = None
         self.ready_queue = ready_queue
         self.eta_schedule = eta_schedule
         self.send_events = send_events
+        self.method_queue = Queue()
         self.init_callback = init_callback
         self.logger = logger
         self.hostname = hostname or socket.gethostname()
@@ -258,7 +262,21 @@ class CarrotListener(object):
 
     def _mainloop(self, **kwargs):
         while 1:
-            yield self.connection.drain_events()
+            while 1:
+                try:
+                    m = self.method_queue.get_nowait()
+                except Empty:
+                    break
+                else:
+                    method, margs, mkwargs = m
+                    method(*margs, **mkwargs)
+
+            try:
+                self.connection.drain_events(timeout=0.1)
+            except socket.timeout:
+                pass
+            else:
+                yield
 
     def _detect_wait_method(self):
         if hasattr(self.connection.connection, "drain_events"):

@@ -17,12 +17,8 @@ accept_lock = threading.Lock()
 
 
 def do_work(target, args=(), kwargs={}, callback=None,
-        accept_callback=None):
-    accept_lock.acquire()
-    try:
-        accept_callback()
-    finally:
-        accept_lock.release()
+        accept_callback=None, consumer=None):
+    consumer.method_queue.put_nowait((accept_callback, (), {}))
     callback(target(*args, **kwargs))
 
 
@@ -76,7 +72,7 @@ class TaskPool(object):
             target, args, kwargs))
 
         self._pool.spawn(do_work, target, args, kwargs,
-                                on_ready, accept_callback)
+                                on_ready, accept_callback, self.consumer)
         self._pool.next()
 
     def on_ready(self, callbacks, errbacks, ret_value):

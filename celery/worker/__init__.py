@@ -165,6 +165,7 @@ class WorkController(object):
         self.listener = instantiate(listener_cls,
                                     self.ready_queue,
                                     self.eta_schedule,
+                                    pool=self.pool,
                                     logger=self.logger,
                                     hostname=self.hostname,
                                     send_events=self.send_events,
