@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from __future__ import with_statement
+
 import os
 import socket
 import time
@@ -38,9 +40,8 @@ class AMQPBackend(BaseDictBackend):
         conf = self.app.conf
         self._connection = connection
         self.queue_arguments = {}
-        if persistent is None:
-            persistent = conf.CELERY_RESULT_PERSISTENT
-        self.persistent = persistent
+        self.persistent = (conf.CELERY_RESULT_PERSISTENT if persistent is None
+                                                         else persistent)
         delivery_mode = persistent and "persistent" or "transient"
         exchange = exchange or conf.CELERY_RESULT_EXCHANGE
         exchange_type = exchange_type or conf.CELERY_RESULT_EXCHANGE_TYPE
@@ -51,15 +52,14 @@ class AMQPBackend(BaseDictBackend):
                                       auto_delete=auto_delete)
         self.serializer = serializer or conf.CELERY_RESULT_SERIALIZER
         self.auto_delete = auto_delete
-        self.expires = expires
-        if self.expires is None:
-            self.expires = conf.CELERY_AMQP_TASK_RESULT_EXPIRES
+        self.expires = (conf.CELERY_AMQP_TASK_RESULT_EXPIRES if expires is None
+                                                             else expires)
         if isinstance(self.expires, timedelta):
             self.expires = timeutils.timedelta_seconds(self.expires)
         if self.expires is not None:
             self.expires = int(self.expires)
             # requires RabbitMQ 2.1.0 or higher.
-            self.queue_arguments["x-expires"] = int(self.expires * 1000.0)
+            self.queue_arguments["x-expires"] = self.expires * 1000.0
         self.connection_max = (connection_max or
                                conf.CELERY_AMQP_TASK_RESULT_CONNECTION_MAX)
 
@@ -99,8 +99,7 @@ class AMQPBackend(BaseDictBackend):
             max_retries=20, interval_start=0, interval_step=1,
             interval_max=1):
         """Send task return value and status."""
-        conn = self.pool.acquire(block=True)
-        try:
+        with self.pool.acquire(block=True) as conn:
             send = conn.ensure(self, self._publish_result,
                         max_retries=max_retries,
                         interval_start=interval_start,
@@ -109,9 +108,6 @@ class AMQPBackend(BaseDictBackend):
             send(conn, task_id, {"task_id": task_id, "status": status,
                                  "result": self.encode_result(result, status),
                                  "traceback": traceback})
-        finally:
-            conn.release()
-
         return result
 
     def get_task_meta(self, task_id, cache=True):
@@ -142,9 +138,7 @@ class AMQPBackend(BaseDictBackend):
             return self.wait_for(task_id, timeout, cache)
 
     def poll(self, task_id):
-        conn = self.pool.acquire(block=True)
-        channel = conn.channel()
-        try:
+        with self.pool.acquire_channel(block=True) as (conn, channel):
             binding = self._create_binding(task_id)(channel)
             binding.declare()
             result = binding.get()
@@ -154,9 +148,6 @@ class AMQPBackend(BaseDictBackend):
             elif task_id in self._cache:  # use previously received state.
                 return self._cache[task_id]
             return {"status": states.PENDING, "result": None}
-        finally:
-            channel.close()
-            conn.release()
 
     def drain_events(self, connection, consumer, timeout=None, now=time.time):
         wait = connection.drain_events
@@ -166,38 +157,28 @@ class AMQPBackend(BaseDictBackend):
             if meta["status"] in states.READY_STATES:
                 uuid = repair_uuid(message.delivery_info["routing_key"])
                 results[uuid] = meta
-        consumer.register_callback(callback)
 
+        consumer.register_callback(callback)
         time_start = now()
-        while 1:
-            # Total time spent may exceed a single call to wait()
-            if timeout and now() - time_start >= timeout:
-                raise socket.timeout()
-            wait(timeout=timeout)
-            if results:  # got event on the wanted channel.
-                break
-        self._cache.update(results)
-        return results
+        with consumer as consumer:
+            while 1:
+                # Total time spent may exceed a single call to wait()
+                if timeout and now() - time_start >= timeout:
+                    raise socket.timeout()
+                wait(timeout=timeout)
+                if results:  # got event on the wanted channel.
+                    break
+            self._cache.update(results)
+            return results
 
     def consume(self, task_id, timeout=None):
-        conn = self.pool.acquire(block=True)
-        channel = conn.channel()
-        try:
+        with self.pool.acquire_channel(block=True) as (conn, channel):
             binding = self._create_binding(task_id)
             consumer = self._create_consumer(binding, channel)
-            consumer.consume()
-            try:
-                return self.drain_events(conn, consumer, timeout).values()[0]
-            finally:
-                consumer.cancel()
-        finally:
-            channel.close()
-            conn.release()
+            return self.drain_events(conn, consumer, timeout).values()[0]
 
     def get_many(self, task_ids, timeout=None):
-        conn = self.pool.acquire(block=True)
-        channel = conn.channel()
-        try:
+        with self.pool.acquire_channel(block=True) as (conn, channel):
             ids = set(task_ids)
             cached_ids = set()
             for task_id in ids:
@@ -213,24 +194,11 @@ class AMQPBackend(BaseDictBackend):
 
             bindings = [self._create_binding(task_id) for task_id in task_ids]
             consumer = self._create_consumer(bindings, channel)
-            consumer.consume()
-            try:
-                while ids:
-                    r = self.drain_events(conn, consumer, timeout)
-                    ids ^= set(r.keys())
-                    for ready_id, ready_meta in r.items():
-                        yield ready_id, ready_meta
-            except:   # ☹ Py2.4 — Cannot yield inside try: finally: block
-                consumer.cancel()
-                raise
-            consumer.cancel()
-
-        except:  # … ☹
-            channel.close()
-            conn.release()
-            raise
-        channel.close()
-        conn.release()
+            while ids:
+                r = self.drain_events(conn, consumer, timeout)
+                ids ^= set(r.keys())
+                for ready_id, ready_meta in r.items():
+                    yield ready_id, ready_meta
 
     def reload_task_result(self, task_id):
         raise NotImplementedError(
@@ -263,7 +231,6 @@ class AMQPBackend(BaseDictBackend):
         if self._pool is None:
             self._set_pool()
         elif os.getpid() != self._pool_owner_pid:
-            print("--- RESET POOL AFTER FORK --- ")
             self._reset_after_fork()
             self._set_pool()
         return self._pool
