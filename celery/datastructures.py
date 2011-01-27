@@ -8,8 +8,6 @@ Custom data structures.
 :license: BSD, see LICENSE for more details.
 
 """
-from __future__ import generators
-
 import time
 import traceback
 

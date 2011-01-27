@@ -1,4 +1,4 @@
-from __future__ import generators
+from __future__ import absolute_import
 
 import time
 
@@ -6,10 +6,10 @@ from copy import copy
 from itertools import imap
 
 from celery import states
+from celery import current_app
 from celery.app import app_or_default
 from celery.exceptions import TimeoutError
 from celery.registry import _unpickle_task
-from celery.utils.compat import any, all
 
 
 def _unpickle_result(task_id, task_name):
@@ -34,10 +34,10 @@ class BaseAsyncResult(object):
     backend = None
 
     def __init__(self, task_id, backend, task_name=None, app=None):
+        self.app = app_or_default(app)
         self.task_id = task_id
         self.backend = backend
         self.task_name = task_name
-        self.app = app_or_default(app)
 
     def __reduce__(self):
         if self.task_name:
@@ -415,16 +415,14 @@ class TaskSetResult(object):
             >>> result = TaskSetResult.restore(taskset_id)
 
         """
-        if backend is None:
-            backend = self.app.backend
-        backend.save_taskset(self.taskset_id, self)
+        (self.app.backend if backend is None
+                          else backend).save_taskset(self.taskset_id, self)
 
     @classmethod
     def restore(self, taskset_id, backend=None):
         """Restore previously saved taskset result."""
-        if backend is None:
-            backend = app_or_default().backend
-        return backend.restore_taskset(taskset_id)
+        return (current_app.backend if backend is None
+                                    else backend).restore_taskset(taskset_id)
 
     @property
     def total(self):

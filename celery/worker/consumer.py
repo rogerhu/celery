@@ -67,9 +67,6 @@ up and running.
   early, *then* close the connection.
 
 """
-
-from __future__ import generators
-
 import socket
 import sys
 import threading
@@ -110,14 +107,11 @@ class QoS(object):
 
     def increment(self, n=1):
         """Increment the current prefetch count value by one."""
-        self._mutex.acquire()
-        try:
+        with self._mutex:
             if self.value:
                 self.value += max(n, 0)
                 self.set(self.value)
             return self.value
-        finally:
-            self._mutex.release()
 
     def _sub(self, n=1):
         assert self.value - n > 1
@@ -125,14 +119,11 @@ class QoS(object):
 
     def decrement(self, n=1):
         """Decrement the current prefetch count value by one."""
-        self._mutex.acquire()
-        try:
+        with self._mutex:
             if self.value:
                 self._sub(n)
                 self.set(self.value)
             return self.value
-        finally:
-            self._mutex.release()
 
     def decrement_eventually(self, n=1):
         """Decrement the value, but do not update the qos.
@@ -141,12 +132,9 @@ class QoS(object):
         when necessary.
 
         """
-        self._mutex.acquire()
-        try:
+        with self._mutex:
             if self.value:
                 self._sub(n)
-        finally:
-            self._mutex.release()
 
     def set(self, pcount):
         """Set channel prefetch_count setting."""
@@ -158,11 +146,8 @@ class QoS(object):
 
     def update(self):
         """Update prefetch count with current value."""
-        self._mutex.acquire()
-        try:
+        with self._mutex:
             return self.set(self.value)
-        finally:
-            self._mutex.release()
 
 
 class Consumer(object):
@@ -273,7 +258,7 @@ class Consumer(object):
         self.broadcast_consumer.consume()
         self.logger.debug("Consumer: Ready to accept tasks!")
 
-        while 1:
+        while self.connection:
             if not self.connection:
                 break
             if self.qos.prev != self.qos.value:

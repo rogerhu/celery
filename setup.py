@@ -15,7 +15,7 @@ elif sys.version_info <= (2, 5):
     tests_require.append("simplejson")
 
 if sys.version_info < (2, 4):
-    raise Exception("Celery requires Python 2.4 or higher.")
+    raise Exception("Celery requires Python 2.5 or higher.")
 
 try:
     from setuptools import setup, find_packages, Command

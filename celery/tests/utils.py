@@ -1,5 +1,3 @@
-from __future__ import generators
-
 try:
     import unittest
     unittest.skip
@@ -15,12 +13,14 @@ try:
 except ImportError:    # py3k
     import builtins
 
-from celery.utils.compat import StringIO
+from contextlib import contextmanager
+from functools import wraps
 
 from nose import SkipTest
 
 from celery.app import app_or_default
-from celery.utils.functional import wraps
+from celery.utils import noop
+from celery.utils.compat import StringIO
 
 
 class AppCase(unittest.TestCase):
@@ -39,64 +39,6 @@ class AppCase(unittest.TestCase):
 
     def teardown(self):
         pass
-
-
-class GeneratorContextManager(object):
-    def __init__(self, gen):
-        self.gen = gen
-
-    def __enter__(self):
-        try:
-            return self.gen.next()
-        except StopIteration:
-            raise RuntimeError("generator didn't yield")
-
-    def __exit__(self, type, value, traceback):
-        if type is None:
-            try:
-                self.gen.next()
-            except StopIteration:
-                return
-            else:
-                raise RuntimeError("generator didn't stop")
-        else:
-            try:
-                self.gen.throw(type, value, traceback)
-                raise RuntimeError("generator didn't stop after throw()")
-            except StopIteration:
-                return True
-            except AttributeError:
-                raise value
-            except:
-                if sys.exc_info()[1] is not value:
-                    raise
-
-
-def fallback_contextmanager(fun):
-    def helper(*args, **kwds):
-        return GeneratorContextManager(fun(*args, **kwds))
-    return helper
-
-
-def execute_context(context, fun):
-    val = context.__enter__()
-    exc_info = (None, None, None)
-    try:
-        try:
-            return fun(val)
-        except:
-            exc_info = sys.exc_info()
-            raise
-    finally:
-        context.__exit__(*exc_info)
-
-
-try:
-    from contextlib import contextmanager
-except ImportError:
-    contextmanager = fallback_contextmanager
-
-from celery.utils import noop
 
 
 @contextmanager

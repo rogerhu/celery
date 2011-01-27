@@ -1,3 +1,5 @@
+from __future__ import with_statement
+
 import logging
 import os
 import sys
@@ -8,6 +10,7 @@ try:
 except ImportError:
     current_process = None
 
+from functools import wraps
 
 from nose import SkipTest
 from kombu.tests.utils import redirect_stdouts
@@ -21,10 +24,8 @@ from celery.bin.celeryd import WorkerCommand, windows_main, \
                                main as celeryd_main
 from celery.exceptions import ImproperlyConfigured
 from celery.utils import patch
-from celery.utils.functional import wraps
 
 from celery.tests.compat import catch_warnings
-from celery.tests.utils import execute_context
 from celery.tests.utils import AppCase
 from celery.tests.utils import StringIO
 
@@ -185,14 +186,12 @@ class test_Worker(AppCase):
 
         prev, os.geteuid = os.geteuid, geteuid
         try:
-            def with_catch_warnings(log):
+            with catch_warnings(record=True) as log:
                 worker = self.Worker()
                 worker.run()
                 self.assertTrue(log)
                 self.assertIn("superuser privileges is not encouraged",
                               log[0].message.args[0])
-            context = catch_warnings(record=True)
-            execute_context(context, with_catch_warnings)
         finally:
             os.geteuid = prev
 

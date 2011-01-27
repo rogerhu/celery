@@ -1,5 +1,3 @@
-from __future__ import generators
-
 import os
 import sys
 import operator
@@ -9,6 +7,7 @@ import threading
 import traceback
 import warnings
 
+from functools import partial, wraps
 from inspect import getargspec
 from itertools import islice
 from pprint import pprint
@@ -16,8 +15,6 @@ from pprint import pprint
 from kombu.utils import gen_unique_id, rpartition
 
 from celery.utils.compat import StringIO
-from celery.utils.functional import partial, wraps
-
 
 LOG_LEVELS = dict(logging._levelNames)
 LOG_LEVELS["FATAL"] = logging.FATAL

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from __future__ import with_statement
+
 import anyjson
 import logging
 import os
@@ -26,7 +28,7 @@ from celery.worker.state import revoked
 
 from celery.tests.compat import catch_warnings
 from celery.tests.utils import unittest
-from celery.tests.utils import execute_context, StringIO
+from celery.tests.utils import StringIO
 
 
 scratch = {"ACK": False}
@@ -384,16 +386,13 @@ class test_TaskRequest(unittest.TestCase):
 
         WorkerTaskTrace.execute = _error_exec
         try:
-            def with_catch_warnings(log):
+            with catch_warnings(record=True) as log:
                 res = execute_and_trace(mytask.name, gen_unique_id(),
                                         [4], {})
                 self.assertIsInstance(res, ExceptionInfo)
                 self.assertTrue(log)
                 self.assertIn("Exception outside", log[0].message.args[0])
                 self.assertIn("KeyError", log[0].message.args[0])
-
-            context = catch_warnings(record=True)
-            execute_context(context, with_catch_warnings)
         finally:
             WorkerTaskTrace.execute = old_exec
 

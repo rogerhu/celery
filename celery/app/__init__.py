@@ -11,12 +11,12 @@ Celery Application.
 import os
 import threading
 
+from functools import wraps
 from inspect import getargspec
 
 from celery import registry
 from celery.app import base
 from celery.utils import cached_property, instantiate
-from celery.utils.functional import wraps
 
 # Apps with the :attr:`~celery.app.base.BaseApp.set_as_current` attribute
 # sets this, so it will always contain the last instantiated app,

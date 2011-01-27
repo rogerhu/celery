@@ -11,11 +11,11 @@ Application Base Class.
 import platform as _platform
 
 from copy import deepcopy
+from functools import wraps
 
 from celery.app.defaults import DEFAULTS
 from celery.datastructures import ConfigurationView
 from celery.utils import cached_property, instantiate, lpmerge
-from celery.utils.functional import wraps
 
 
 class BaseApp(object):

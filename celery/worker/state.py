@@ -1,9 +1,10 @@
 import platform
 import shelve
 
+from collections import defaultdict
+
 from celery import __version__
 from celery.utils import cached_property
-from celery.utils.compat import defaultdict
 from celery.datastructures import LimitedSet
 
 #: Worker software/platform information.
