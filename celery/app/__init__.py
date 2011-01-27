@@ -46,9 +46,8 @@ class App(base.BaseApp):
     def create_task_cls(self):
         """Creates a base task class using default configuration
         taken from this app."""
+        from celery.app.task import BaseTask
         conf = self.conf
-
-        from celery.task.base import BaseTask
 
         class Task(BaseTask):
             abstract = True
