@@ -22,7 +22,7 @@ from celery.result import AsyncResult
 from celery.task.base import Task
 from celery.utils import gen_unique_id
 from celery.worker.job import WorkerTaskTrace, TaskRequest
-from celery.worker.job import execute_and_trace, AlreadyExecutedError
+from celery.worker.job import execute_and_trace
 from celery.worker.job import InvalidTaskError
 from celery.worker.state import revoked
 
@@ -43,13 +43,8 @@ def on_ack():
     scratch["ACK"] = True
 
 
-@task_dec(accept_magic_kwargs=True)
+@task_dec()
 def mytask(i, **kwargs):
-    return i ** i
-
-
-@task_dec               # traverses coverage for decorator without parens
-def mytask_no_kwargs(i):
     return i ** i
 
 
@@ -60,13 +55,8 @@ class MyTaskIgnoreResult(Task):
         return i ** i
 
 
-@task_dec(accept_magic_kwargs=True)
-def mytask_some_kwargs(i, logfile):
-    some_kwargs_scratchpad["logfile"] = logfile
-    return i ** i
 
-
-@task_dec(accept_magic_kwargs=True)
+@task_dec()
 def mytask_raising(i, **kwargs):
     raise KeyError(i)
 
@@ -427,13 +417,6 @@ class test_TaskRequest(unittest.TestCase):
         w.handle_failure(value_, type_, tb_, "")
         self.assertEqual(mytask.backend.get_status(uuid), states.FAILURE)
 
-    def test_executed_bit(self):
-        tw = TaskRequest(mytask.name, gen_unique_id(), [], {})
-        self.assertFalse(tw.executed)
-        tw._set_executed_bit()
-        self.assertTrue(tw.executed)
-        self.assertRaises(AlreadyExecutedError, tw._set_executed_bit)
-
     def test_task_wrapper_mail_attrs(self):
         tw = TaskRequest(mytask.name, gen_unique_id(), [], {})
         x = tw.success_msg % {"name": tw.task_name,
@@ -485,23 +468,6 @@ class test_TaskRequest(unittest.TestCase):
         self.assertEqual(meta["result"], 256)
         self.assertEqual(meta["status"], states.SUCCESS)
 
-    def test_execute_success_no_kwargs(self):
-        tid = gen_unique_id()
-        tw = TaskRequest(mytask_no_kwargs.name, tid, [4], {})
-        self.assertEqual(tw.execute(), 256)
-        meta = mytask_no_kwargs.backend.get_task_meta(tid)
-        self.assertEqual(meta["result"], 256)
-        self.assertEqual(meta["status"], states.SUCCESS)
-
-    def test_execute_success_some_kwargs(self):
-        tid = gen_unique_id()
-        tw = TaskRequest(mytask_some_kwargs.name, tid, [4], {})
-        self.assertEqual(tw.execute(logfile="foobaz.log"), 256)
-        meta = mytask_some_kwargs.backend.get_task_meta(tid)
-        self.assertEqual(some_kwargs_scratchpad.get("logfile"), "foobaz.log")
-        self.assertEqual(meta["result"], 256)
-        self.assertEqual(meta["status"], states.SUCCESS)
-
     def test_execute_ack(self):
         tid = gen_unique_id()
         tw = TaskRequest(mytask.name, tid, [4], {"f": "x"},
@@ -546,20 +512,6 @@ class test_TaskRequest(unittest.TestCase):
         self.assertEqual(p.args[2], [4])
         self.assertIn("f", p.args[3])
         self.assertIn([4], p.args)
-
-    def test_default_kwargs(self):
-        tid = gen_unique_id()
-        tw = TaskRequest(mytask.name, tid, [4], {"f": "x"})
-        self.assertDictEqual(
-                tw.extend_with_default_kwargs(10, "some_logfile"), {
-                    "f": "x",
-                    "logfile": "some_logfile",
-                    "loglevel": 10,
-                    "task_id": tw.task_id,
-                    "task_retries": 0,
-                    "task_is_eager": False,
-                    "delivery_info": {},
-                    "task_name": tw.task_name})
 
     def _test_on_failure(self, exception):
         app = app_or_default()

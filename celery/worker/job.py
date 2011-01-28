@@ -15,8 +15,7 @@ from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
 from celery.exceptions import WorkerLostError, RetryTaskError
 from celery.execute.trace import TaskTrace
 from celery.registry import tasks
-from celery.utils import noop, kwdict, fun_takes_kwargs
-from celery.utils import truncate_text
+from celery.utils import noop, kwdict, truncate_text
 from celery.utils.timeutils import maybe_iso8601
 from celery.worker import state
 
@@ -272,7 +271,7 @@ class TaskRequest(object):
 
         """
         delivery_info = getattr(message, "delivery_info", {})
-        delivery_info = dict((key, _delivery_info.get(key))
+        delivery_info = dict((key, delivery_info.get(key))
                                 for key in WANTED_DELIVERY_INFO)
 
         kwargs = body["kwargs"]
@@ -298,32 +297,6 @@ class TaskRequest(object):
                 "is_eager": False,
                 "delivery_info": self.delivery_info}
 
-    def extend_with_default_kwargs(self, loglevel, logfile):
-        """Extend the tasks keyword arguments with standard task arguments.
-
-        Currently these are `logfile`, `loglevel`, `task_id`,
-        `task_name`, `task_retries`, and `delivery_info`.
-
-        See :meth:`celery.task.base.Task.run` for more information.
-
-        """
-        if not self.task.accept_magic_kwargs:
-            return self.kwargs
-        kwargs = dict(self.kwargs)
-        default_kwargs = {"logfile": logfile,
-                          "loglevel": loglevel,
-                          "task_id": self.task_id,
-                          "task_name": self.task_name,
-                          "task_retries": self.retries,
-                          "task_is_eager": False,
-                          "delivery_info": self.delivery_info}
-        fun = self.task.run
-        supported_keys = fun_takes_kwargs(fun, default_kwargs)
-        extend_with = dict((key, val) for key, val in default_kwargs.items()
-                                if key in supported_keys)
-        kwargs.update(extend_with)
-        return kwargs
-
     def execute_using_pool(self, pool, loglevel=None, logfile=None):
         """Like :meth:`execute`, but using the :mod:`multiprocessing` pool.
 
@@ -334,20 +307,18 @@ class TaskRequest(object):
         :keyword logfile: The logfile used by the task.
 
         """
-        if self.revoked():
-            return
-
-        args = self._get_tracer_args(loglevel, logfile)
-        instance_attrs = self.get_instance_attrs(loglevel, logfile)
-        result = pool.apply_async(execute_and_trace,
-                                  args=args,
-                                  kwargs={"hostname": self.hostname,
-                                          "request": instance_attrs},
-                                  accept_callback=self.on_accepted,
-                                  timeout_callback=self.on_timeout,
-                                  callbacks=[self.on_success],
-                                  errbacks=[self.on_failure])
-        return result
+        if not self.revoked():
+            instance_attrs = self.get_instance_attrs(loglevel, logfile)
+            result = pool.apply_async(execute_and_trace,
+                                      args=(self.task_name, self.task_id,
+                                            self.args, self.kwargs),
+                                      kwargs={"hostname": self.hostname,
+                                              "request": instance_attrs},
+                                      accept_callback=self.on_accepted,
+                                      timeout_callback=self.on_timeout,
+                                      callback=self.on_success,
+                                      errback=self.on_failure)
+            return result
 
     def execute(self, loglevel=None, logfile=None):
         """Execute the task in a :class:`WorkerTaskTrace`.
@@ -357,21 +328,17 @@ class TaskRequest(object):
         :keyword logfile: The logfile used by the task.
 
         """
-        if self.revoked():
-            return
-
-        # acknowledge task as being processed.
-        if not self.task.acks_late:
+        if not self.revoked():
+            if not self.task.acks_late:
+                self.acknowledge()
+            instance_attrs = self.get_instance_attrs(loglevel, logfile)
+            r = WorkerTaskTrace(self.task_name, self.task_id,
+                                self.args, self.kwargs,
+                                hostname=self.hostname,
+                                loader=self.app.loader,
+                                request=instance_attrs).execute()
             self.acknowledge()
-
-        instance_attrs = self.get_instance_attrs(loglevel, logfile)
-        tracer = WorkerTaskTrace(*self._get_tracer_args(loglevel, logfile),
-                                 **{"hostname": self.hostname,
-                                    "loader": self.app.loader,
-                                    "request": instance_attrs})
-        retval = tracer.execute()
-        self.acknowledge()
-        return retval
+            return r
 
     def maybe_expire(self):
         """If expired, mark the task as revoked."""
@@ -383,10 +350,9 @@ class TaskRequest(object):
     def terminate(self, pool, signal=None):
         if self._terminate_on_ack is not None:
             return
-        elif self.time_start:
+        if self.time_start:
             return pool.terminate_job(self.worker_pid, signal)
-        else:
-            self._terminate_on_ack = (True, pool, signal)
+        self._terminate_on_ack = (pool, signal)
 
     def revoked(self):
         """If revoked, skip task and mark state."""
@@ -404,8 +370,7 @@ class TaskRequest(object):
         return False
 
     def send_event(self, type, **fields):
-        if self.eventer:
-            self.eventer.send(type, **fields)
+        self.eventer and self.eventer.send(type, **fields)
 
     def on_accepted(self, pid, time_accepted):
         """Handler called when task is accepted by worker pool."""
@@ -418,8 +383,7 @@ class TaskRequest(object):
         self.logger.debug("Task accepted: %s[%s] pid:%r" % (
             self.task_name, self.task_id, pid))
         if self._terminate_on_ack is not None:
-            _, pool, signal = self._terminate_on_ack
-            self.terminate(pool, signal)
+            self.terminate(*self._terminate_on_ack)
 
     def on_timeout(self, soft):
         """Handler called if the task times out."""
@@ -443,7 +407,7 @@ class TaskRequest(object):
         if self.task.acks_late:
             self.acknowledge()
 
-        runtime = self.time_start and (time.time() - self.time_start) or 0
+        runtime = (time.time() - self.time_start) if self.time_start else 0
         self.send_event("task-succeeded", uuid=self.task_id,
                         result=repr(ret_value), runtime=runtime)
 
@@ -492,7 +456,6 @@ class TaskRequest(object):
                    "traceback": default_encode(exc_info.traceback),
                    "args": self.args,
                    "kwargs": self.kwargs}
-
         self.logger.error(self.error_msg.strip() % context,
                           exc_info=exc_info,
                           extra={"data": {"id": self.task_id,
@@ -513,9 +476,8 @@ class TaskRequest(object):
     def send_error_email(self, task, context, exc,
             whitelist=None, enabled=False, fail_silently=True):
         if enabled and not task.disable_error_emails:
-            if whitelist:
-                if not isinstance(exc, tuple(whitelist)):
-                    return
+            if whitelist and not isinstance(exc, tuple(whitelist)):
+                return
             subject = self.email_subject.strip() % context
             body = self.email_body.strip() % context
             self.app.mail_admins(subject, body, fail_silently=fail_silently)
@@ -526,34 +488,21 @@ class TaskRequest(object):
         return truncate_text(repr(result), maxlen)
 
     def info(self, safe=False):
-        args = self.args
-        kwargs = self.kwargs
-        if not safe:
-            args = repr(args)
-            kwargs = repr(self.kwargs)
-
         return {"id": self.task_id,
                 "name": self.task_name,
-                "args": args,
-                "kwargs": kwargs,
+                "args": self.args     if safe else repr(self.args),
+                "kwargs": self.kwargs if safe else repr(self.kwargs),
                 "hostname": self.hostname,
                 "time_start": self.time_start,
                 "acknowledged": self.acknowledged,
                 "delivery_info": self.delivery_info}
 
     def shortinfo(self):
-        return "%s[%s]%s%s" % (
-                    self.task_name,
-                    self.task_id,
-                    self.eta and " eta:[%s]" % (self.eta, ) or "",
-                    self.expires and " expires:[%s]" % (self.expires, ) or "")
+        return "%s[%s]%s%s" % (self.task_name, self.task_id,
+                    " eta:[%s]" % (self.eta, ) if self.eta else "",
+                    " expires:[%s]" % (self.expires, ) if self.expires else "")
 
     def __repr__(self):
         return '<%s: {name:"%s", id:"%s", args:"%s", kwargs:"%s"}>' % (
-                self.__class__.__name__,
-                self.task_name, self.task_id, self.args, self.kwargs)
-
-    def _get_tracer_args(self, loglevel=None, logfile=None):
-        """Get the :class:`WorkerTaskTrace` tracer for this task."""
-        task_func_kwargs = self.extend_with_default_kwargs(loglevel, logfile)
-        return self.task_name, self.task_id, self.args, task_func_kwargs
+                self.__class__.__name__, self.task_name, self.task_id,
+                self.args, self.kwargs)

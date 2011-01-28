@@ -12,7 +12,6 @@ import os
 import threading
 
 from functools import wraps
-from inspect import getargspec
 
 from celery import registry
 from celery.app import base
@@ -64,7 +63,6 @@ class App(base.BaseApp):
             ignore_result = conf.CELERY_IGNORE_RESULT
             store_errors_even_if_ignored = \
                 conf.CELERY_STORE_ERRORS_EVEN_IF_IGNORED
-            accept_magic_kwargs = self.accept_magic_kwargs
 
         return Task
 
@@ -123,17 +121,11 @@ class App(base.BaseApp):
 
             def _create_task_cls(fun):
                 options["app"] = self
-                options.setdefault("accept_magic_kwargs", False)
                 base = options.pop("base", None) or self.Task
 
                 @wraps(fun, assigned=("__module__", "__name__"))
                 def run(self, *args, **kwargs):
                     return fun(*args, **kwargs)
-
-                # Save the argspec for this task so we can recognize
-                # which default task kwargs we're going to pass to it later.
-                # (this happens in celery.utils.fun_takes_kwargs)
-                run.argspec = getargspec(fun)
 
                 cls_dict = dict(options, run=run,
                                 __module__=fun.__module__,
@@ -167,16 +159,14 @@ class App(base.BaseApp):
                                 self.amqp_cls,
                                 self.events_cls,
                                 self.log_cls,
-                                self.control_cls,
-                                self.accept_magic_kwargs))
+                                self.control_cls))
 
 
 def _unpickle_app(cls, main, changes, loader, backend, amqp,
-        events, log, control, accept_magic_kwargs):
+        events, log, control):
     app = cls(main, loader=loader, backend=backend, amqp=amqp,
                     events=events, log=log, control=control,
-                    set_as_current=False,
-                    accept_magic_kwargs=accept_magic_kwargs)
+                    set_as_current=False)
     app.conf.update(changes)
     return app
 
@@ -185,8 +175,7 @@ def _unpickle_app(cls, main, changes, loader, backend, amqp,
 default_loader = os.environ.get("CELERY_LOADER") or "default"
 
 #: Global fallback app instance.
-default_app = App("default", loader=default_loader,
-                  set_as_current=False, accept_magic_kwargs=True)
+default_app = App("default", loader=default_loader, set_as_current=False)
 
 
 def current_app():

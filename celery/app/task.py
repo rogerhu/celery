@@ -6,7 +6,7 @@ from celery.exceptions import MaxRetriesExceededError, RetryTaskError
 from celery.execute.trace import TaskTrace
 from celery.registry import tasks, _unpickle_task
 from celery.result import EagerResult
-from celery.utils import mattrgetter, gen_unique_id, fun_takes_kwargs
+from celery.utils import mattrgetter, gen_unique_id
 
 extract_exec_options = mattrgetter("queue", "routing_key",
                                    "exchange", "immediate",
@@ -96,10 +96,6 @@ class BaseTask(object):
 
     #: If :const:`True` the task is an abstract base class.
     abstract = True
-
-    #: If disabled the worker will not forward magic keyword arguments.
-    #: Deprecated and scheduled for removal in v3.0.
-    accept_magic_kwargs = False
 
     #: Request context (set when task is applied).
     request = Context()
@@ -536,20 +532,6 @@ class BaseTask(object):
                    "logfile": options.get("logfile"),
                    "loglevel": options.get("loglevel", 0),
                    "delivery_info": {"is_eager": True}}
-        if self.accept_magic_kwargs:
-            default_kwargs = {"task_name": task.name,
-                              "task_id": task_id,
-                              "task_retries": retries,
-                              "task_is_eager": True,
-                              "logfile": options.get("logfile"),
-                              "loglevel": options.get("loglevel", 0),
-                              "delivery_info": {"is_eager": True}}
-            supported_keys = fun_takes_kwargs(task.run, default_kwargs)
-            extend_with = dict((key, val)
-                                    for key, val in default_kwargs.items()
-                                        if key in supported_keys)
-            kwargs.update(extend_with)
-
         trace = TaskTrace(task.name, task_id, args, kwargs,
                           task=task, request=request, propagate=throw)
         retval = trace.execute()
