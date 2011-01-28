@@ -2,17 +2,8 @@
 
 from celery import current_app
 from celery.schedules import maybe_schedule
-from celery.utils import deprecated
 from celery.utils import timeutils
-from celery.task import sets
 from celery.app.task import Context, BaseTask, TaskType
-
-TaskSet = deprecated("Importing TaskSet from celery.task.base",
-                     alternative="Use celery.task.TaskSet instead.",
-                     removal="2.4")(sets.TaskSet)
-subtask = deprecated("Importing subtask from celery.task.base",
-                     alternative="Use celery.task.subtask instead.",
-                     removal="2.4")(sets.subtask)
 
 
 Task = current_app.Task

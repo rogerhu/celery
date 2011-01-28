@@ -19,37 +19,6 @@ LOG_LEVELS = dict(logging._levelNames)
 LOG_LEVELS["FATAL"] = logging.FATAL
 LOG_LEVELS[logging.FATAL] = "FATAL"
 
-PENDING_DEPRECATION_FMT = """
-    %(description)s is scheduled for deprecation in \
-    version %(deprecation)s and removal in version v%(removal)s. \
-    %(alternative)s
-"""
-
-DEPRECATION_FMT = """
-    %(description)s is deprecated and scheduled for removal in
-    version %(removal)s. %(alternative)s
-"""
-
-
-def deprecated(description=None, deprecation=None, removal=None,
-        alternative=None):
-
-    def _inner(fun):
-
-        @wraps(fun)
-        def __inner(*args, **kwargs):
-            ctx = {"description": description or get_full_cls_name(fun),
-                   "deprecation": deprecation, "removal": removal,
-                   "alternative": alternative}
-            if deprecation is not None:
-                w = PendingDeprecationWarning(PENDING_DEPRECATION_FMT % ctx)
-            else:
-                w = DeprecationWarning(DEPRECATION_FMT % ctx)
-            warnings.warn(w)
-            return fun(*args, **kwargs)
-        return __inner
-    return _inner
-
 
 def lpmerge(L, R):
     """Left precedent dictionary merge.  Keeps values from `l`, if the value
