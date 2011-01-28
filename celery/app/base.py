@@ -8,8 +8,11 @@ Application Base Class.
 :license: BSD, see LICENSE for more details.
 
 """
+from __future__ import absolute_import, with_statement
+
 import platform as _platform
 
+from contextlib import contextmanager
 from copy import deepcopy
 from functools import wraps
 
@@ -106,8 +109,8 @@ class BaseApp(object):
         exchange = options.get("exchange")
         exchange_type = options.get("exchange_type")
 
-        def _do_publish(connection=None, **_):
-            publish = publisher or self.amqp.TaskPublisher(connection,
+        with self.default_connection(connection, connect_timeout) as conn:
+            publish = publisher or self.amqp.TaskPublisher(conn,
                                             exchange=exchange,
                                             exchange_type=exchange_type)
             try:
@@ -117,11 +120,7 @@ class BaseApp(object):
                                             expires=expires, **options)
             finally:
                 publisher or publish.close()
-
             return result_cls(new_id)
-
-        return self.with_default_connection(_do_publish)(
-                connection=connection, connect_timeout=connect_timeout)
 
     def AsyncResult(self, task_id, backend=None, task_name=None):
         """Create :class:`celery.result.BaseAsyncResult` instance."""
@@ -167,6 +166,13 @@ class BaseApp(object):
                     connect_timeout=self.either(
                                 "BROKER_CONNECTION_TIMEOUT", connect_timeout))
 
+    @contextmanager
+    def default_connection(self, connection=None, connect_timeout=None):
+        conn = connection or self.broker_connection(
+                                connect_timeout=connect_timeout)
+        yield conn
+        connection or conn.close()
+
     def with_default_connection(self, fun):
         """With any function accepting `connection` and `connect_timeout`
         keyword arguments, establishes a default connection if one is
@@ -176,20 +182,12 @@ class BaseApp(object):
         the function returns.
 
         """
-
         @wraps(fun)
         def _inner(*args, **kwargs):
-            connection = kwargs.get("connection")
-            timeout = kwargs.get("connect_timeout")
-            kwargs["connection"] = conn = connection or \
-                    self.broker_connection(connect_timeout=timeout)
-            close_connection = not connection and conn.close or None
-
-            try:
-                return fun(*args, **kwargs)
-            finally:
-                if close_connection:
-                    close_connection()
+            connection = kwargs.pop("connection", None)
+            connect_timeout = kwargs.get("connect_timeout")
+            with self.default_connection(connection, connect_timeout) as c:
+                return fun(*args, **dict(kwargs, connection=c))
         return _inner
 
     def prepare_config(self, c):

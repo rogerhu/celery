@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+from __future__ import absolute_import, with_statement
 
 import time
 
@@ -293,12 +293,9 @@ class TaskSetResult(object):
     def revoke(self, connection=None, connect_timeout=None):
         """Revoke all subtasks."""
 
-        def _do_revoke(connection=None, connect_timeout=None):
+        with self.app.default_connection(connection, connect_timeout) as conn:
             for subtask in self.subtasks:
-                subtask.revoke(connection=connection)
-
-        return self.app.with_default_connection(_do_revoke)(
-                connection=connection, connect_timeout=connect_timeout)
+                subtask.revoke(connection=conn)
 
     def __iter__(self):
         """`iter(res)` -> `res.iterate()`."""

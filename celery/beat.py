@@ -3,6 +3,8 @@
 Periodic Task Scheduler
 
 """
+from __future__ import absolute_import
+
 import time
 import shelve
 import sys
@@ -71,35 +73,30 @@ class ScheduleEntry(object):
             options={}, relative=False):
         self.name = name
         self.task = task
-        self.schedule = maybe_schedule(schedule, relative)
         self.args = args
         self.kwargs = kwargs
         self.options = options
+        self.schedule = maybe_schedule(schedule, relative)
         self.last_run_at = last_run_at or datetime.now()
         self.total_run_count = total_run_count or 0
 
     def next(self, last_run_at=None):
         """Returns a new instance of the same class, but with
         its date and count fields updated."""
-        last_run_at = last_run_at or datetime.now()
-        total_run_count = self.total_run_count + 1
         return self.__class__(**dict(self,
-                                     last_run_at=last_run_at,
-                                     total_run_count=total_run_count))
+                                     last_run_at=last_run_at or datetime.now(),
+                                     total_run_count=self.total_run_count + 1))
 
     def update(self, other):
         """Update values from another entry.
 
-        Does only update "editable" fields (schedule, args,
-        kwargs, options).
+        Does only update "editable" fields (task, schedule, args, kwargs,
+        options).
 
         """
-        self.task = other.task
-        self.schedule = other.schedule
-        self.args = other.args
-        self.kwargs = other.kwargs
-        self.options = other.options
-
+        self.__dict__.update({"task": other.task, "schedule": other.schedule,
+                              "args": other.args, "kwargs": other.kwargs,
+                              "options": other.options})
     def is_due(self):
         """See :meth:`celery.task.base.PeriodicTask.is_due`."""
         return self.schedule.is_due(self.last_run_at)
@@ -108,11 +105,8 @@ class ScheduleEntry(object):
         return vars(self).iteritems()
 
     def __repr__(self):
-        return "<Entry: %s %s(*%s, **%s) {%s}>" % (self.name,
-                                                   self.task,
-                                                   self.args,
-                                                   self.kwargs,
-                                                   self.schedule)
+        return ("<Entry: %(name)s %(task)s(*%(args)s, **%(kwargs)s) "
+                "{%(schedule)s}>" % vars(self))
 
 
 class Scheduler(UserDict):
@@ -140,17 +134,13 @@ class Scheduler(UserDict):
     def __init__(self, schedule=None, logger=None, max_interval=None,
             app=None, Publisher=None, lazy=False, **kwargs):
         UserDict.__init__(self)
-        if schedule is None:
-            schedule = {}
-        self.app = app_or_default(app)
-        conf = self.app.conf
-        self.data = maybe_promise(schedule)
-        self.logger = logger or self.app.log.get_default_logger(
-                                                name="celery.beat")
-        self.max_interval = max_interval or conf.CELERYBEAT_MAX_LOOP_INTERVAL
-        self.Publisher = Publisher or self.app.amqp.TaskPublisher
-        if not lazy:
-            self.setup_schedule()
+        app = self.app = app_or_default(app)
+        self.data = maybe_promise({} if schedule is None else schedule)
+        self.logger = logger or app.log.get_default_logger(name="celery.beat")
+        self.max_interval = max_interval or \
+                                app.conf.CELERYBEAT_MAX_LOOP_INTERVAL
+        self.Publisher = Publisher or app.amqp.TaskPublisher
+        not lazy and self.setup_schedule()
 
     def install_default_entries(self, data):
         entries = {}
@@ -203,11 +193,7 @@ class Scheduler(UserDict):
         # so we have that done if an exception is raised (doesn't schedule
         # forever.)
         entry = self.reserve(entry)
-
-        try:
-            task = registry.tasks[entry.task]
-        except KeyError:
-            task = None
+        task = registry.tasks.get(entry.task)
 
         try:
             if task:
@@ -294,8 +280,7 @@ class PersistentScheduler(Scheduler):
         Scheduler.__init__(self, *args, **kwargs)
 
     def setup_schedule(self):
-        self._store = self.persistence.open(self.schedule_filename,
-                writeback=True)
+        self._store = self.persistence.open(self.schedule_filename)
         self.merge_inplace(self.app.conf.CELERYBEAT_SCHEDULE)
         self.install_default_entries(self._store)
         self.sync()
@@ -323,26 +308,23 @@ class Service(object):
     def __init__(self, logger=None,
             max_interval=None, schedule=None, schedule_filename=None,
             scheduler_cls=None, app=None):
-        self.app = app_or_default(app)
+        app = self.app = app_or_default(app)
         self.max_interval = max_interval or \
-                            self.app.conf.CELERYBEAT_MAX_LOOP_INTERVAL
+                                app.conf.CELERYBEAT_MAX_LOOP_INTERVAL
         self.scheduler_cls = scheduler_cls or self.scheduler_cls
-        self.logger = logger or self.app.log.get_default_logger(
-                                                name="celery.beat")
-        self.schedule = schedule or self.app.conf.CELERYBEAT_SCHEDULE
+        self.logger = logger or app.log.get_default_logger(name="celery.beat")
+        self.schedule = schedule or app.conf.CELERYBEAT_SCHEDULE
         self.schedule_filename = schedule_filename or \
-                                    self.app.conf.CELERYBEAT_SCHEDULE_FILENAME
+                                    app.conf.CELERYBEAT_SCHEDULE_FILENAME
 
         self._shutdown = threading.Event()
         self._stopped = threading.Event()
-        silence = self.max_interval < 60 and 10 or 1
         self.debug = SilenceRepeated(self.logger.debug,
-                                     max_iterations=silence)
+                        10 if self.max_interval < 60 else 1)
 
     def start(self, embedded_process=False):
         self.logger.info("Celerybeat: Starting...")
-        self.logger.debug("Celerybeat: "
-            "Ticking with max interval->%s" % (
+        self.logger.debug("Celerybeat: Ticking with max interval->%s" % (
                     humanize_seconds(self.scheduler.max_interval)))
 
         signals.beat_init.send(sender=self)
@@ -351,14 +333,13 @@ class Service(object):
             platforms.set_process_title("celerybeat")
 
         try:
-            try:
-                while not self._shutdown.isSet():
-                    interval = self.scheduler.tick()
-                    self.debug("Celerybeat: Waking up %s." % (
-                            humanize_seconds(interval, prefix="in ")))
-                    time.sleep(interval)
-            except (KeyboardInterrupt, SystemExit):
-                self._shutdown.set()
+            while not self._shutdown.isSet():
+                interval = self.scheduler.tick()
+                self.debug("Celerybeat: Waking up %s." % (
+                        humanize_seconds(interval, prefix="in ")))
+                time.sleep(interval)
+        except (KeyboardInterrupt, SystemExit):
+            self._shutdown.set()
         finally:
             self.sync()
 
@@ -369,7 +350,7 @@ class Service(object):
     def stop(self, wait=False):
         self.logger.info("Celerybeat: Shutting down...")
         self._shutdown.set()
-        wait and self._stopped.wait()           # block until shutdown done.
+        wait and self._stopped.wait()  # block until shutdown done.
 
     def get_scheduler(self, lazy=False):
         filename = self.schedule_filename

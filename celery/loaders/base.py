@@ -8,7 +8,7 @@ import anyjson
 
 from celery.utils import cached_property, import_from_cwd as _import_from_cwd
 
-BUILTIN_MODULES = frozenset(["celery.task"])
+BUILTIN_MODULES = ["celery.task"]
 
 
 class BaseLoader(object):
@@ -60,8 +60,8 @@ class BaseLoader(object):
 
     def import_default_modules(self):
         imports = self.conf.get("CELERY_IMPORTS") or ()
-        imports = set(list(imports)) + BUILTIN_MODULES
-        return [self.import_task_module(module) for module in imports]
+        return [self.import_task_module(module)
+                for module in set(list(imports) + BUILTIN_MODULES)]
 
     def init_worker(self):
         if not self.worker_initialized:
@@ -138,4 +138,4 @@ class BaseLoader(object):
 
     @cached_property
     def mail(self):
-        import_module("celery.utils.mail")
+        return self.import_module("celery.utils.mail")

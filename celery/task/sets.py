@@ -1,3 +1,5 @@
+from __future__ import absolute_import, with_statement
+
 import warnings
 
 from celery import registry
@@ -148,26 +150,22 @@ class TaskSet(UserList):
     def apply_async(self, connection=None, connect_timeout=None,
             publisher=None):
         """Apply taskset."""
-        return self.app.with_default_connection(self._apply_async)(
-                    connection=connection,
-                    connect_timeout=connect_timeout,
-                    publisher=publisher)
-
-    def _apply_async(self, connection=None, connect_timeout=None,
-            publisher=None):
-        if self.app.conf.CELERY_ALWAYS_EAGER:
+        app = self.app
+        if app.conf.CELERY_ALWAYS_EAGER:
             return self.apply()
 
-        taskset_id = gen_unique_id()
-        pub = publisher or self.Publisher(connection=connection)
-        try:
-            results = [task.apply_async(taskset_id=taskset_id, publisher=pub)
+        with app.default_connection(connection, connect_timeout) as conn:
+            taskset_id = gen_unique_id()
+            pub = publisher or self.Publisher(conn)
+            try:
+                results = [task.apply_async(taskset_id=taskset_id,
+                                            publisher=pub)
                             for task in self.tasks]
-        finally:
-            if not publisher:  # created by us.
-                pub.close()
+            finally:
+                if not publisher:  # created by us.
+                    pub.close()
 
-        return self.app.TaskSetResult(taskset_id, results)
+            return app.TaskSetResult(taskset_id, results)
 
     def apply(self):
         """Applies the taskset locally by blocking until all tasks return."""
