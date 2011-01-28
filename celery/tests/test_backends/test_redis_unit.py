@@ -45,9 +45,9 @@ class redis(object):
 class test_RedisBackend(unittest.TestCase):
 
     def get_backend(self):
-        from celery.backends import pyredis
+        from celery.backends import redis as redis_backend
 
-        class RedisBackend(pyredis.RedisBackend):
+        class RedisBackend(redis_backend.RedisBackend):
             redis = redis
 
         return RedisBackend
