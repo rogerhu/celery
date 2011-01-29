@@ -1,3 +1,5 @@
+from __future__ import absolute_import, with_statement
+
 import time
 import socket
 import threading
@@ -88,21 +90,17 @@ class EventDispatcher(object):
         :keyword \*\*fields: Event arguments.
 
         """
-        if not self.enabled:
-            return
+        if self.enabled:
+            key = type.replace("-", ".")
 
-        self._lock.acquire()
-        event = Event(type, hostname=self.hostname, **fields)
-        try:
-            try:
-                self.publisher.publish(event,
-                                       routing_key=type.replace("-", "."))
-            except Exception, exc:
-                if not self.buffer_while_offline:
-                    raise
-                self._outbound_buffer.append((type, fields, exc))
-        finally:
-            self._lock.release()
+            with self._lock:
+                event = Event(type, hostname=self.hostname, **fields)
+                try:
+                    self.publisher.publish(event, routing_key=key)
+                except Exception, exc:
+                    if not self.buffer_while_offline:
+                        raise
+                    self._outbound_buffer.append((type, fields, exc))
 
     def flush(self):
         while self._outbound_buffer:
@@ -168,16 +166,15 @@ class EventReceiver(object):
 
     def itercapture(self, limit=None, timeout=None, wakeup=True):
         consumer = self.consumer()
-        consumer.consume()
-        if wakeup:
-            self.wakeup_workers(channel=consumer.channel)
-
-        yield consumer
-
         try:
-            self.drain_events(limit=limit, timeout=timeout)
+            with consumer:
+                if wakeup:
+                    self.wakeup_workers(channel=consumer.channel)
+
+                yield consumer
+
+                self.drain_events(limit=limit, timeout=timeout)
         finally:
-            consumer.cancel()
             consumer.channel.close()
 
     def capture(self, limit=None, timeout=None, wakeup=True):
@@ -187,14 +184,11 @@ class EventReceiver(object):
         stop unless forced via :exc:`KeyboardInterrupt` or :exc:`SystemExit`.
 
         """
-        list(self.itercapture(limit=limit,
-                              timeout=timeout,
-                              wakeup=wakeup))
+        list(self.itercapture(limit=limit, timeout=timeout, wakeup=wakeup))
 
     def wakeup_workers(self, channel=None):
         self.app.control.broadcast("heartbeat",
-                                   connection=self.connection,
-                                   channel=channel)
+                            connection=self.connection, channel=channel)
 
     def drain_events(self, limit=None, timeout=None):
         for iteration in count(0):
@@ -211,29 +205,3 @@ class EventReceiver(object):
     def _receive(self, body, message):
         type = body.pop("type").lower()
         self.process(type, create_event(type, body))
-
-
-class Events(object):
-
-    def __init__(self, app=None):
-        self.app = app
-
-    def Receiver(self, connection, handlers=None, routing_key="#",
-            node_id=None):
-        return EventReceiver(connection,
-                             handlers=handlers,
-                             routing_key=routing_key,
-                             node_id=node_id,
-                             app=self.app)
-
-    def Dispatcher(self, connection=None, hostname=None, enabled=True,
-            channel=None, buffer_while_offline=True):
-        return EventDispatcher(connection,
-                               hostname=hostname,
-                               enabled=enabled,
-                               channel=channel,
-                               app=self.app)
-
-    def State(self):
-        from celery.events.state import State as _State
-        return _State()

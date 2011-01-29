@@ -1,13 +1,18 @@
 from celery import states
 from celery.app import app_or_default
+from celery.exceptions import TimeoutError
+from celery.result import AsyncResult, EagerResult, TaskSetResult
+from celery.task import task, Task
 from celery.utils import gen_unique_id
 from celery.utils.serialization import pickle
-from celery.result import AsyncResult, EagerResult, TaskSetResult
-from celery.exceptions import TimeoutError
-from celery.task.base import Task
 
 from celery.tests.utils import unittest
 from celery.tests.utils import skip_if_quick
+
+
+@task
+def mytask():
+    pass
 
 
 def mock_task(name, status, result):
@@ -45,10 +50,10 @@ class TestAsyncResult(unittest.TestCase):
             save_result(task)
 
     def test_reduce(self):
-        a1 = AsyncResult("uuid", task_name="celery.ping")
+        a1 = AsyncResult("uuid", task_name=mytask.name)
         restored = pickle.loads(pickle.dumps(a1))
         self.assertEqual(restored.task_id, "uuid")
-        self.assertEqual(restored.task_name, "celery.ping")
+        self.assertEqual(restored.task_name, mytask.name)
 
         a2 = AsyncResult("uuid")
         self.assertEqual(pickle.loads(pickle.dumps(a2)).task_id, "uuid")

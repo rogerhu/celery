@@ -3,8 +3,6 @@ import heapq
 
 from threading import Lock
 
-from kombu.utils import partition
-
 from celery import states
 from celery.datastructures import AttributeDict, LocalCache
 from celery.utils import kwdict
@@ -250,7 +248,7 @@ class State(object):
     def _dispatch_event(self, event):
         self.event_count += 1
         event = kwdict(event)
-        group, _, type = partition(event.pop("type"), "-")
+        group, _, type = event.pop("type").partition("-")
         self.group_handlers[group](type, event)
         if self.event_callback:
             self.event_callback(self, event)

@@ -11,7 +11,7 @@ from functools import wraps
 from itertools import islice
 from pprint import pprint
 
-from kombu.utils import gen_unique_id, rpartition
+from kombu.utils import gen_unique_id
 
 from celery.utils.compat import StringIO
 
@@ -242,7 +242,7 @@ def get_cls_by_name(name, aliases={}, imp=None):
         return name                                 # already a class
 
     name = aliases.get(name) or name
-    module_name, _, cls_name = rpartition(name, ".")
+    module_name, _, cls_name = name.rpartition(".")
     module = imp(module_name)
     return getattr(module, cls_name)
 
@@ -277,7 +277,7 @@ def abbrtask(S, max):
     if S is None:
         return "???"
     if len(S) > max:
-        module, _, cls = rpartition(S, ".")
+        module, _, cls = S.rpartition(".")
         module = abbr(module, max - len(cls) - 3, False)
         return module + "[.]" + cls
     return S

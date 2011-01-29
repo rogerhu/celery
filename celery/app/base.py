@@ -29,10 +29,10 @@ class BaseApp(object):
 
     amqp_cls = "celery.app.amqp.AMQP"
     backend_cls = None
-    events_cls = "celery.events.Events"
+    events_cls = "celery.app.events.Events"
     loader_cls = "app"
-    log_cls = "celery.log.Logging"
-    control_cls = "celery.task.control.Control"
+    log_cls = "celery.app.log.Logging"
+    control_cls = "celery.app.control.Control"
 
     def __init__(self, main=None, loader=None, backend=None,
             amqp=None, events=None, log=None, control=None,

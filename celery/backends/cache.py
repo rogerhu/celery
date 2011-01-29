@@ -1,7 +1,5 @@
 from datetime import timedelta
 
-from kombu.utils import partition
-
 from celery.backends.base import KeyValueStoreBackend
 from celery.exceptions import ImproperlyConfigured
 from celery.utils import cached_property
@@ -71,7 +69,7 @@ class CacheBackend(KeyValueStoreBackend):
 
         backend = backend or self.app.conf.CELERY_CACHE_BACKEND
         self.expires = int(self.expires)
-        self.backend, _, servers = partition(backend, "://")
+        self.backend, _, servers = backend.partition("://")
         self.servers = servers.split(";")
         try:
             self.Client = backends[self.backend]()

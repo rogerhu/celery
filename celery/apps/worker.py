@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+
 import atexit
 import logging
 try:
@@ -8,8 +10,6 @@ import os
 import socket
 import sys
 import warnings
-
-from kombu.utils import partition
 
 from celery import __version__
 from celery import platforms
@@ -41,9 +41,7 @@ EXTRA_INFO_FMT = """
 
 
 def cpu_count():
-    if multiprocessing is not None:
-        return multiprocessing.cpu_count()
-    return 2
+    return multiprocessing.cpu_count() if multiprocessing else 2
 
 
 class Worker(object):
@@ -58,8 +56,7 @@ class Worker(object):
             autoscale=None, scheduler_cls=None, pool=None, **kwargs):
         self.app = app = app_or_default(app)
         self.concurrency = (concurrency or
-                            app.conf.CELERYD_CONCURRENCY or
-                            cpu_count())
+                            app.conf.CELERYD_CONCURRENCY or cpu_count())
         self.loglevel = loglevel or app.conf.CELERYD_LOG_LEVEL
         self.logfile = logfile or app.conf.CELERYD_LOG_FILE
 
@@ -84,13 +81,13 @@ class Worker(object):
                                        app.conf.CELERY_REDIRECT_STDOUTS_LEVEL)
         self.pool = (pool or app.conf.CELERYD_POOL)
         self.db = db
-        self.use_queues = queues or []
+        self.use_queues = [] if queues is None else queues
         self.queues = None
-        self.include = include or []
+        self.include = [] if include is None else include
         self.pidfile = pidfile
         self.autoscale = None
         if autoscale:
-            max_c, _, min_c = partition(autoscale, ",")
+            max_c, _, min_c = autoscale.partition(",")
             self.autoscale = [int(max_c), min_c and int(min_c) or 0]
         self._isatty = sys.stdout.isatty()
 
@@ -202,8 +199,8 @@ class Worker(object):
             "concurrency": concurrency,
             "loglevel": LOG_LEVELS[self.loglevel],
             "logfile": self.logfile or "[stderr]",
-            "celerybeat": self.run_clockservice and "ON" or "OFF",
-            "events": self.events and "ON" or "OFF",
+            "celerybeat": "ON" if self.run_clockservice else "OFF",
+            "events": "ON" if self.events else "OFF",
             "loader": get_full_cls_name(self.loader.__class__),
             "queues": self.queues.format(indent=18, indent_first=False),
         }
@@ -310,9 +307,7 @@ def install_worker_term_handler(worker):
         process_name = None
         if multiprocessing:
             process_name = multiprocessing.current_process().name
-        print("SHOULD STOP? %r" % (process_name, ))
         if not process_name or process_name == "MainProcess":
-            print("STOPPING")
             worker.logger.warn("celeryd: Warm shutdown (%s)" % (
                 process_name))
             worker.stop(in_sighandler=True)

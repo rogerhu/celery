@@ -3,10 +3,16 @@ from functools import wraps
 from kombu.pidbox import Mailbox
 
 from celery.app import app_or_default
+from celery.app import control as _control
 from celery.task import control
-from celery.task import PingTask
+from celery.task import task
 from celery.utils import gen_unique_id
 from celery.tests.utils import unittest
+
+
+@task
+def mytask():
+    return 42
 
 
 class MockMailbox(Mailbox):
@@ -22,7 +28,7 @@ class MockMailbox(Mailbox):
         pass
 
 
-class Control(control.Control):
+class Control(_control.Control):
     Mailbox = MockMailbox
 
 
@@ -140,7 +146,7 @@ class test_Broadcast(unittest.TestCase):
 
     @with_mock_broadcast
     def test_rate_limit(self):
-        self.control.rate_limit(PingTask.name, "100/m")
+        self.control.rate_limit(mytask.name, "100/m")
         self.assertIn("rate_limit", MockMailbox.sent)
 
     @with_mock_broadcast
