@@ -151,11 +151,6 @@ class WorkController(object):
         self.db = db or conf.CELERYD_STATE_DB
         self.disable_rate_limits = disable_rate_limits or \
                                 conf.CELERY_DISABLE_RATE_LIMITS
-
-        # FIXME
-        # For some reason disable rate limits does not work currently,
-        # needs to be fixed for v2.2.0.
-        self.disable_rate_limits = False
         self.queues = queues
 
         self._finalize = Finalize(self, self.stop, exitpriority=1)
@@ -190,13 +185,11 @@ class WorkController(object):
                                 timeout=self.task_time_limit,
                                 soft_timeout=self.task_soft_time_limit,
                                 putlocks=self.pool_putlocks)
-        if not self.eta_scheduler_cls:
-            # Default Timer is set by the pool, as e.g. eventlet
-            # needs a custom implementation.
-            self.eta_scheduler_cls = self.pool.Timer
+        self.priority_timer = instantiate(self.pool.Timer)
 
         if autoscale:
-            self.autoscaler = instantiate(self.autoscaler_cls, self.pool,
+            self.autoscaler = instantiate(self.autoscaler_cls,
+                                          self.priority_timer, self.pool,
                                           max_concurrency=max_concurrency,
                                           min_concurrency=min_concurrency,
                                           logger=self.logger)
@@ -208,10 +201,15 @@ class WorkController(object):
                                         callback=self.process_task,
                                         logger=self.logger)
 
+        if not self.eta_scheduler_cls:
+            # Default Timer is set by the pool, as e.g. eventlet
+            # needs a custom implementation.
+            self.eta_scheduler_cls = self.pool.Timer
         self.scheduler = instantiate(self.eta_scheduler_cls,
                                 precision=eta_scheduler_precision,
                                 on_error=self.on_timer_error,
                                 on_tick=self.on_timer_tick)
+
 
         self.beat = None
         if self.embed_clockservice:
@@ -229,6 +227,7 @@ class WorkController(object):
                                     send_events=self.send_events,
                                     init_callback=self.ready_callback,
                                     initial_prefetch_count=prefetch_count,
+                                    priority_timer=self.priority_timer,
                                     pool=self.pool,
                                     queues=self.queues,
                                     app=self.app)

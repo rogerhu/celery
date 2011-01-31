@@ -205,7 +205,8 @@ class Consumer(object):
 
     def __init__(self, ready_queue, eta_schedule, logger,
             init_callback=noop, send_events=False, hostname=None,
-            initial_prefetch_count=2, pool=None, queues=None, app=None):
+            initial_prefetch_count=2, pool=None, queues=None, app=None,
+            priority_timer=None):
         self.app = app_or_default(app)
         self.connection = None
         self.task_consumer = None
@@ -217,6 +218,7 @@ class Consumer(object):
         self.logger = logger
         self.hostname = hostname or socket.gethostname()
         self.initial_prefetch_count = initial_prefetch_count
+        self.priority_timer = priority_timer
         self.event_dispatcher = None
         self.heart = None
         self.pool = pool
@@ -247,23 +249,26 @@ class Consumer(object):
             try:
                 self.reset_connection()
                 self.consume_messages()
-            except self.connection_errors:
-                self.logger.error("Consumer: Connection to broker lost."
-                                + " Trying to re-establish connection...")
+            except self.connection_errors, exc:
+                self.logger.error(
+                    "Consumer: Connection to broker lost. %r"
+                    " Trying to re-establish connection..." % (exc, ))
 
     def consume_messages(self):
         """Consume messages forever (or until an exception is raised)."""
-        self.logger.debug("Consumer: Starting message consumer...")
-        self.task_consumer.consume()
-        self.broadcast_consumer.consume()
-        self.logger.debug("Consumer: Ready to accept tasks!")
+        try:
+            self.logger.debug("Consumer: Starting message consumer...")
+            self.task_consumer.consume()
+            self.broadcast_consumer.consume()
+            self.logger.debug("Consumer: Ready to accept tasks!")
 
-        while self.connection:
-            if not self.connection:
-                break
-            if self.qos.prev != self.qos.value:
-                self.qos.update()
-            self.connection.drain_events()
+            while 1:
+                if self.qos.prev != self.qos.value:
+                    self.qos.update()
+                self.connection.drain_events()
+        except BaseException, exc:
+            print("EXCEPTION: %r" % (exc, ))
+            raise SystemExit()
 
     def on_task(self, task):
         """Handle received task.
@@ -467,7 +472,7 @@ class Consumer(object):
         self._state = RUN
 
     def restart_heartbeat(self):
-        self.heart = Heart(self.event_dispatcher)
+        self.heart = Heart(self.priority_timer, self.event_dispatcher)
         self.heart.start()
 
     def _open_connection(self):

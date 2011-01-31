@@ -1,27 +1,22 @@
 import sys
-import threading
 import traceback
 
-from time import sleep, time
+from time import time
 
 from celery.worker import state
 
 
-class Autoscaler(threading.Thread):
+class Autoscaler(object):
 
-    def __init__(self, pool, max_concurrency, min_concurrency=0,
+    def __init__(self, timer, pool, max_concurrency, min_concurrency=0,
             keepalive=30, logger=None):
-        threading.Thread.__init__(self)
+        self.timer = timer
         self.pool = pool
         self.max_concurrency = max_concurrency
         self.min_concurrency = min_concurrency
         self.keepalive = keepalive
         self.logger = logger
         self._last_action = None
-        self._shutdown = threading.Event()
-        self._stopped = threading.Event()
-        self.setDaemon(True)
-        self.setName(self.__class__.__name__)
 
         assert self.keepalive, "can't scale down too fast."
 
@@ -31,36 +26,31 @@ class Autoscaler(threading.Thread):
             self.scale_up(current - self.processes)
         elif current < self.processes:
             self.scale_down((self.processes - current) - self.min_concurrency)
-        sleep(1.0)
 
     def scale_up(self, n):
-        self.logger.info("Scaling up %s processes." % (n, ))
+        self.logger.info("Scaling up %s processes." % n)
         self._last_action = time()
         return self.pool.grow(n)
 
     def scale_down(self, n):
-        if not self._last_action or not n:
-            return
-        if time() - self._last_action > self.keepalive:
-            self.logger.info("Scaling down %s processes." % (n, ))
-            self._last_action = time()
-            try:
-                self.pool.shrink(n)
-            except Exception, exc:
-                self.logger.error("Autoscaler: scale_down: %r\n%r" % (
-                                    exc, traceback.format_stack()),
-                                  exc_info=sys.exc_info())
+        if self._last_action or n:
+            now = time()
+            if now - self._last_action > self.keepalive:
+                self.logger.info("Scaling down %s processes." % n)
+                self._last_action = now
+                try:
+                    self.pool.shrink(n)
+                except Exception, exc:
+                    self.logger.error("Autoscaler: scale_down: %r\n%r" % (
+                                        exc, traceback.format_stack()),
+                                    exc_info=sys.exc_info())
 
-    def run(self):
-        while not self._shutdown.isSet():
-            self.scale()
-        self._stopped.set()
+    def start(self):
+        self.tref = self.timer.apply_interval(1000, self.scale)
 
     def stop(self):
-        self._shutdown.set()
-        self._stopped.wait()
-        if self.isAlive():
-            self.join(1e10)
+        if self.tref:
+            self.tref.cancel()
 
     @property
     def qty(self):
