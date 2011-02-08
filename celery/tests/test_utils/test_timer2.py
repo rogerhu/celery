@@ -42,7 +42,7 @@ class test_Schedule(unittest.TestCase):
         timer2.mktime = _overflow
         try:
             s.enter(timer2.Entry(lambda: None, (), {}),
-                    eta=datetime.now())
+                    eta=datetime.utcnow())
         finally:
             timer2.mktime = mktime
 

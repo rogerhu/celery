@@ -70,16 +70,12 @@ class TestLoaders(unittest.TestCase):
         loader1 = loaders.current_loader()
         loader2 = loaders.current_loader()
         self.assertIs(loader1, loader2)
-        self.assertIs(loader2, loaders._loader)
 
     def test_load_settings(self):
         loader = loaders.current_loader()
-        loaders._settings = None
+        self.assertTrue(loader)
         settings = loaders.load_settings()
-        self.assertTrue(loaders._settings)
-        settings = loaders.load_settings()
-        self.assertIs(settings, loaders._settings)
-        self.assertIs(settings, loader.conf)
+        self.assertTrue(settings)
 
     @with_environ("CELERY_LOADER", "default")
     def test_detect_loader_CELERY_LOADER(self):

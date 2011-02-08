@@ -345,7 +345,7 @@ class test_Consumer(unittest.TestCase):
         m = create_message(backend, task=foo_task.name,
                                     args=("2, 2"),
                                     kwargs={},
-                                    eta=datetime.now().isoformat())
+                                    eta=datetime.utcnow().isoformat())
         l.event_dispatcher = MockEventDispatcher()
         l.pidbox_node = MockNode()
 
@@ -505,7 +505,7 @@ class test_Consumer(unittest.TestCase):
                              send_events=False)
         backend = MockBackend()
         m = create_message(backend, task=foo_task.name,
-                           eta=datetime.now().isoformat(),
+                           eta=datetime.utcnow().isoformat(),
                            args=[2, 4, 8], kwargs={})
 
         l.task_consumer = MockConsumer()
@@ -555,7 +555,7 @@ class test_Consumer(unittest.TestCase):
         backend = MockBackend()
         m = create_message(backend, task=foo_task.name,
                            args=[2, 4, 8], kwargs={},
-                           eta=(datetime.now() +
+                           eta=(datetime.utcnow() +
                                timedelta(days=1)).isoformat())
 
         l.reset_connection()

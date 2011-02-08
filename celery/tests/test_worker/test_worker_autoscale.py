@@ -36,35 +36,32 @@ class MockPool(BasePool):
         return self._pool._processes
 
 
+class MockTimer(object):
+
+    def apply_interval(self, msecs, fun, args=None, kwargs=None):
+
+        class entry(tuple):
+            cancelled = False
+
+            def cancel(self):
+                self.cancelled = True
+
+        return entry((msecs, fun, args, kwargs))
+
+
 class test_Autoscaler(unittest.TestCase):
 
     def setUp(self):
         self.pool = MockPool(3)
 
-    def test_stop(self):
-
-        class Scaler(autoscale.Autoscaler):
-            alive = True
-            joined = False
-
-            def isAlive(self):
-                return self.alive
-
-            def join(self, timeout=None):
-                self.joined = True
-
-        x = Scaler(self.pool, 10, 3, logger=logger)
-        x._stopped.set()
+        x = autoscale.Autoscaler(MockTimer(), self.pool, 10, 3, logger=logger)
+        x.start()
+        self.assertTrue(x.tref)
         x.stop()
-        self.assertTrue(x.joined)
-        x.joined = False
-        x.alive = False
-        x.stop()
-        self.assertFalse(x.joined)
+        self.assertIsNone(x.tref)
 
-    @sleepdeprived(autoscale)
     def test_scale(self):
-        x = autoscale.Autoscaler(self.pool, 10, 3, logger=logger)
+        x = autoscale.Autoscaler(MockTimer(), self.pool, 10, 3, logger=logger)
         x.scale()
         self.assertEqual(x.pool.current, 3)
         for i in range(20):
@@ -79,23 +76,8 @@ class test_Autoscaler(unittest.TestCase):
         x.scale()
         self.assertEqual(x.pool.current, 3)
 
-    def test_run(self):
-
-        class Scaler(autoscale.Autoscaler):
-            scale_called = False
-
-            def scale(self):
-                self.scale_called = True
-                self._shutdown.set()
-
-        x = Scaler(self.pool, 10, 3, logger=logger)
-        x.run()
-        self.assertTrue(x._shutdown.isSet())
-        self.assertTrue(x._stopped.isSet())
-        self.assertTrue(x.scale_called)
-
     def test_shrink_raises_exception(self):
-        x = autoscale.Autoscaler(self.pool, 10, 3, logger=logger)
+        x = autoscale.Autoscaler(MockTimer(), self.pool, 10, 3, logger=logger)
         x.scale_up(3)
         x._last_action = time() - 10000
         x.pool.shrink_raises_exception = True

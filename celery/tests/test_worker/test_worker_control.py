@@ -195,7 +195,7 @@ class test_ControlPanel(unittest.TestCase):
         r = TaskRequest(mytask.name, "CAFEBABE", (), {})
         consumer.eta_schedule.schedule.enter(
                 consumer.eta_schedule.Entry(lambda x: x, (r, )),
-                    datetime.now() + timedelta(seconds=10))
+                    datetime.utcnow() + timedelta(seconds=10))
         self.assertTrue(panel.handle("dump_schedule"))
 
     def test_dump_reserved(self):

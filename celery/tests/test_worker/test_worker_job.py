@@ -162,7 +162,7 @@ class test_TaskRequest(unittest.TestCase):
 
     def test_revoked_expires_expired(self):
         tw = TaskRequest(mytask.name, gen_unique_id(), [1], {"f": "x"})
-        tw.expires = datetime.now() - timedelta(days=1)
+        tw.expires = datetime.utcnow() - timedelta(days=1)
         tw.revoked()
         self.assertIn(tw.task_id, revoked)
         self.assertEqual(mytask.backend.get_status(tw.task_id),
@@ -170,7 +170,7 @@ class test_TaskRequest(unittest.TestCase):
 
     def test_revoked_expires_not_expired(self):
         tw = TaskRequest(mytask.name, gen_unique_id(), [1], {"f": "x"})
-        tw.expires = datetime.now() + timedelta(days=1)
+        tw.expires = datetime.utcnow() + timedelta(days=1)
         tw.revoked()
         self.assertNotIn(tw.task_id, revoked)
         self.assertNotEqual(mytask.backend.get_status(tw.task_id),
@@ -180,7 +180,7 @@ class test_TaskRequest(unittest.TestCase):
         mytask.ignore_result = True
         tw = TaskRequest(mytask.name, gen_unique_id(), [1], {"f": "x"})
         try:
-            tw.expires = datetime.now() - timedelta(days=1)
+            tw.expires = datetime.utcnow() - timedelta(days=1)
             tw.revoked()
             self.assertIn(tw.task_id, revoked)
             self.assertNotEqual(mytask.backend.get_status(tw.task_id),
