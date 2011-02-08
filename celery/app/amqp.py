@@ -193,10 +193,10 @@ class TaskPublisher(messaging.Publisher):
         if not isinstance(task_kwargs, dict):
             raise ValueError("task kwargs must be a dictionary")
         if countdown:                           # Convert countdown to ETA.
-            now = now or datetime.now()
+            now = now or datetime.utcnow()
             eta = now + timedelta(seconds=countdown)
         if isinstance(expires, int):
-            now = now or datetime.now()
+            now = now or datetime.utcnow()
             expires = now + timedelta(seconds=expires)
         eta = eta and eta.isoformat()
         expires = expires and expires.isoformat()

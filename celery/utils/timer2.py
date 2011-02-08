@@ -45,7 +45,7 @@ class Entry(object):
 
 def to_timestamp(d):
     if isinstance(d, datetime):
-        return mktime(d.timetuple())
+        return mktime(d.utctimetuple())
     return d
 
 
@@ -76,6 +76,8 @@ class Schedule(object):
         except OverflowError:
             if not self.handle_error(sys.exc_info()):
                 raise
+
+        print("ETA IS %r" % (eta, ))
 
         if eta is None:
             # schedule now.
@@ -208,7 +210,7 @@ class Timer(Thread):
         return self.enter(self.Entry(fun, args, kwargs), eta, priority)
 
     def enter_after(self, msecs, entry, priority=0):
-        eta = datetime.now() + timedelta(seconds=msecs / 1000.0)
+        eta = datetime.utcnow() + timedelta(seconds=msecs / 1000.0)
         return self.enter(entry, eta, priority)
 
     def apply_after(self, msecs, fun, args=(), kwargs={}, priority=0):

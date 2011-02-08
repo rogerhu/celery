@@ -77,15 +77,15 @@ class ScheduleEntry(object):
         self.kwargs = kwargs
         self.options = options
         self.schedule = maybe_schedule(schedule, relative)
-        self.last_run_at = last_run_at or datetime.now()
+        self.last_run_at = last_run_at or datetime.utcnow()
         self.total_run_count = total_run_count or 0
 
     def next(self, last_run_at=None):
         """Returns a new instance of the same class, but with
         its date and count fields updated."""
         return self.__class__(**dict(self,
-                                     last_run_at=last_run_at or datetime.now(),
-                                     total_run_count=self.total_run_count + 1))
+                                last_run_at=last_run_at or datetime.utcnow(),
+                                total_run_count=self.total_run_count + 1))
 
     def update(self, other):
         """Update values from another entry.

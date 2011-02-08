@@ -13,9 +13,10 @@ class Heart(object):
     def start(self):
         dispatch = self.eventer.send
         dispatch("worker-online", **SOFTWARE_INFO)
-        self.tref = self.timer.apply_interval(self.interval * 1000.0,
-                dispatch, ("worker-heartbeat", ), SOFTWARE_INFO)
+        #self.tref = self.timer.apply_interval(self.interval * 10000.0,
+        #        dispatch, ("worker-heartbeat", ), SOFTWARE_INFO)
 
     def stop(self):
         self.tref.cancel()
+        self.tref = None
         self.eventer.send("worker-offline", **SOFTWARE_INFO)

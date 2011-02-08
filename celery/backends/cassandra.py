@@ -120,7 +120,7 @@ class CassandraBackend(BaseDictBackend):
         date_done = datetime.utcnow()
         index_key = 'celery.results.index!%02x' % (
                 random.randrange(self._index_shards))
-        index_column_name = '%8x!%s' % (time.mktime(date_done.timetuple()),
+        index_column_name = '%8x!%s' % (time.mktime(date_done.utctimetuple()),
                                         task_id)
         meta = {"status": status,
                 "result": pickle.dumps(result),
@@ -150,7 +150,7 @@ class CassandraBackend(BaseDictBackend):
         """Delete expired metadata."""
         self.logger.debug('Running cleanup...')
         expires = datetime.utcnow() - self.result_expires
-        end_column = '%8x"' % (time.mktime(expires.timetuple()))
+        end_column = '%8x"' % (time.mktime(expires.utctimetuple()))
 
         cf = self._get_column_family()
         column_parent = C.ColumnParent(cf.column_family)

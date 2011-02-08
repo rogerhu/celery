@@ -51,6 +51,7 @@ class Autoscaler(object):
     def stop(self):
         if self.tref:
             self.tref.cancel()
+            self.tref = None
 
     @property
     def qty(self):

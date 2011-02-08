@@ -71,11 +71,11 @@ def remaining(start, ends_in, now=None, relative=True):
     :keyword relative: If set to :const:`False`, the end time will be
         calculated using :func:`delta_resolution` (i.e. rounded to the
         resolution of `ends_in`).
-    :keyword now: Function returning the current time and date,
-        defaults to :func:`datetime.now`.
+    :keyword now: The current time and date,
+        defaults to :func:`datetime.utcnow`.
 
     """
-    now = now or datetime.now()
+    now = now or datetime.utcnow()
 
     end_date = start + ends_in
     if not relative:

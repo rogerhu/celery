@@ -8,8 +8,6 @@ from celery.utils import get_cls_by_name
 LOADER_ALIASES = {"app": "celery.loaders.app.AppLoader",
                   "default": "celery.loaders.default.Loader",
                   "django": "djcelery.loaders.DjangoLoader"}
-_loader = None
-_settings = None
 
 
 def get_loader_cls(loader):

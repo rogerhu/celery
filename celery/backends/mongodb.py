@@ -100,7 +100,7 @@ class MongoBackend(BaseDictBackend):
         meta = {"_id": task_id,
                 "status": status,
                 "result": Binary(pickle.dumps(result)),
-                "date_done": datetime.now(),
+                "date_done": datetime.utcnow(),
                 "traceback": Binary(pickle.dumps(traceback))}
 
         db = self._get_database()
@@ -134,6 +134,6 @@ class MongoBackend(BaseDictBackend):
         taskmeta_collection = db[self.mongodb_taskmeta_collection]
         taskmeta_collection.remove({
                 "date_done": {
-                    "$lt": datetime.now() - self.result_expires,
+                    "$lt": datetime.utcnow() - self.result_expires,
                  }
         })
