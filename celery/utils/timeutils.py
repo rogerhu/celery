@@ -1,7 +1,16 @@
 import math
 
+from kombu.utils import cached_property
+
 from datetime import datetime, timedelta
+from dateutil import tz
 from dateutil.parser import parse as parse_iso8601
+
+try:
+    import pytz
+except ImportError:
+    pytz = None
+
 
 DAYNAMES = "sun", "mon", "tue", "wed", "thu", "fri", "sat"
 WEEKDAYS = dict((name, dow) for name, dow in zip(DAYNAMES, range(7)))
@@ -16,6 +25,42 @@ TIME_UNITS = (("day", 60 * 60 * 24, lambda n: int(math.ceil(n))),
               ("hour", 60 * 60, lambda n: int(math.ceil(n))),
               ("minute", 60, lambda n: int(math.ceil(n))),
               ("second", 1, lambda n: "%.2f" % n))
+
+
+class UnknownTimezone(Exception):
+    """No specification exists for the timezone specified.  Consider
+    installing the pytz library to get access to more timezones."""
+
+
+class _Zone(object):
+
+    def to_local(self, dt, tzinfo=None):
+        if tzinfo is None:
+            tzinfo = self.local
+        if isinstance(tzinfo, basestring):
+            tzinfo = self.get_timezone(tzinfo)
+
+        d = dt.replace(tzinfo=self.utc)
+        return d.astimezone(tzinfo)
+
+    def get_timezone(self, name):
+        if pytz:
+            return pytz.timezone(name)
+        zone = tz.gettz(name)
+        if zone is None:
+            raise UnknownTimezone(UnknownTimezone.__doc__)
+        return zone
+
+    @cached_property
+    def local(self):
+        return tz.tzlocal()
+
+    @cached_property
+    def utc(self):
+        return self.get_timezone("UTC")
+
+timezone = _Zone()
+
 
 
 def maybe_timedelta(delta):
@@ -71,11 +116,11 @@ def remaining(start, ends_in, now=None, relative=True):
     :keyword relative: If set to :const:`False`, the end time will be
         calculated using :func:`delta_resolution` (i.e. rounded to the
         resolution of `ends_in`).
-    :keyword now: The current time and date,
-        defaults to :func:`datetime.utcnow`.
+    :keyword now: Function returning the current time and date,
+        defaults to :func:`datetime.now`.
 
     """
-    now = now or datetime.utcnow()
+    now = now or datetime.now()
 
     end_date = start + ends_in
     if not relative:

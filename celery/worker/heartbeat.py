@@ -17,6 +17,7 @@ class Heart(object):
         #        dispatch, ("worker-heartbeat", ), SOFTWARE_INFO)
 
     def stop(self):
-        self.tref.cancel()
-        self.tref = None
+        if self.tref is not None:
+            self.tref.cancel()
+            self.tref = None
         self.eventer.send("worker-offline", **SOFTWARE_INFO)

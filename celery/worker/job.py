@@ -16,7 +16,7 @@ from celery.exceptions import WorkerLostError, RetryTaskError
 from celery.execute.trace import TaskTrace
 from celery.registry import tasks
 from celery.utils import noop, kwdict, truncate_text
-from celery.utils.timeutils import maybe_iso8601
+from celery.utils.timeutils import maybe_iso8601, timezone
 from celery.worker import state
 
 # pep8.py borks on a inline signature separator and
@@ -261,6 +261,13 @@ class TaskRequest(object):
         self._store_errors = True
         if self.task.ignore_result:
             self._store_errors = self.task.store_errors_even_if_ignored
+
+        print("ETA IS %s" % (self.eta, ))
+        if self.eta is not None:
+            self.eta = timezone.to_local(self.eta)
+        print("ETA XS %s" % (self.eta, ))
+        if self.expires is not None:
+            self.expires = timezone.to_local(self.expires)
 
     @classmethod
     def from_message(cls, message, body, on_ack=noop, **kw):
