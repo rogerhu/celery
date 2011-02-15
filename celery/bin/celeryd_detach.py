@@ -15,7 +15,16 @@ OPTION_LIST = daemon_options(default_pidfile="celeryd.pid")
 def detach(path, argv, logfile=None, pidfile=None, uid=None,
            gid=None, umask=0, working_directory=None):
     with detached(logfile, pidfile, uid, gid, umask, working_directory):
-        os.execv(path, [path] + argv)
+        try:
+            os.execv(self.path, [self.path] + self.argv)
+        except Exception:
+            import logging
+            from celery.log import setup_logger
+            logger = setup_logger(logfile=self.logfile,
+                                  loglevel=logging.ERROR)
+            logger.critical("Can't exec %r" % (
+                " ".join([self.path] + self.argv), ),
+                exc_info=sys.exc_info())
 
 
 class PartialOptionParser(OptionParser):

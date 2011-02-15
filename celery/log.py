@@ -16,6 +16,7 @@ from celery import signals
 from celery import current_app
 from celery.utils import LOG_LEVELS, isatty
 from celery.utils.compat import LoggerAdapter
+from celery.utils.encoding import safe_str
 from celery.utils.patch import ensure_process_aware_logger
 from celery.utils.term import colored
 
@@ -41,7 +42,11 @@ class ColorFormatter(logging.Formatter):
         color = self.colors.get(levelname)
 
         if self.use_color and color:
-            record.msg = unicode(color(record.msg))
+            try:
+                record.msg = color(safe_str(record.msg))
+            except Exception, exc:
+                record.msg = "<Unrepresentable %r: %r>" % (type(record.msg),
+                                                           traceback.format_stack())
 
         # Very ugly, but have to make sure processName is supported
         # by foreign logger instances.
@@ -65,6 +70,7 @@ class Logging(object):
         self.app = app
         self.loglevel = self.app.conf.CELERYD_LOG_LEVEL
         self.format = self.app.conf.CELERYD_LOG_FORMAT
+        self.task_format = self.app.conf.CELERYD_TASK_LOG_FORMAT
         self.colorize = self.app.conf.CELERYD_LOG_COLOR
 
     def supports_color(self, logfile=None):
@@ -156,8 +162,8 @@ class Logging(object):
         return self.get_default_logger(name=name)
 
     def setup_task_logger(self, loglevel=None, logfile=None, format=None,
-            colorize=None, task_kwargs=None, propagate=False, app=None,
-            **kwargs):
+            colorize=None, task_name=None, task_id=None, propagate=False,
+            app=None, **kwargs):
         """Setup the task logger.
 
         If `logfile` is not specified, then `sys.stderr` is used.
@@ -166,19 +172,16 @@ class Logging(object):
 
         """
         loglevel = loglevel or self.loglevel
-        format = format or self.format
+        format = format or self.task_format
         if colorize is None:
             colorize = self.supports_color(logfile)
 
-        task_kwargs = {} if task_kwargs is None else task_kwargs
-        task_kwargs.setdefault("task_id", "-?-")
-        task_name = task_kwargs.get("task_name")
-        task_kwargs.setdefault("task_name", "-?-")
         logger = self._setup_logger(self.get_task_logger(loglevel, task_name),
                                     logfile, format, colorize, **kwargs)
         logger.propagate = int(propagate)    # this is an int for some reason.
                                              # better to not question why.
-        return LoggerAdapter(logger, task_kwargs)
+        return LoggerAdapter(logger, {"task_id": task_id,
+                                      "task_name": task_name})
 
     def redirect_stdouts_to_logger(self, logger, loglevel=None):
         """Redirect :class:`sys.stdout` and :class:`sys.stderr` to a

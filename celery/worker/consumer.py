@@ -77,6 +77,7 @@ from celery.app import app_or_default
 from celery.datastructures import AttributeDict
 from celery.exceptions import NotRegistered
 from celery.utils import noop
+from celery.utils.encoding import safe_repr
 from celery.utils.timer2 import to_timestamp
 from celery.worker import state
 from celery.worker.job import TaskRequest, InvalidTaskError
@@ -233,7 +234,6 @@ class Consumer(object):
         conninfo = self.app.broker_connection()
         self.connection_errors = conninfo.connection_errors
         self.channel_errors = conninfo.channel_errors
-        self.queues = queues
 
     def start(self):
         """Start the consumer.
@@ -285,8 +285,8 @@ class Consumer(object):
         self.logger.info("Got task from broker: %s" % (task.shortinfo(), ))
 
         self.event_dispatcher.send("task-received", uuid=task.task_id,
-                name=task.task_name, args=repr(task.args),
-                kwargs=repr(task.kwargs), retries=task.retries,
+                name=task.task_name, args=safe_repr(task.args),
+                kwargs=safe_repr(task.kwargs), retries=task.retries,
                 eta=task.eta and task.eta.isoformat(),
                 expires=task.expires and task.expires.isoformat())
 
@@ -447,7 +447,6 @@ class Consumer(object):
         self.connection = self._open_connection()
         self.logger.debug("Consumer: Connection Established.")
         self.task_consumer = self.app.amqp.get_task_consumer(self.connection,
-                                    queues=self.queues,
                                     on_decode_error=self.on_decode_error)
         # QoS: Reset prefetch window.
         self.qos = QoS(self.task_consumer,

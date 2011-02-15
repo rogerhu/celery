@@ -41,7 +41,12 @@ EXTRA_INFO_FMT = """
 
 
 def cpu_count():
-    return multiprocessing.cpu_count() if multiprocessing else 2
+    if multiprocessing is not None:
+        try:
+            return multiprocessing.cpu_count()
+        except NotImplementedError:
+            pass
+    return 2
 
 
 class Worker(object):
@@ -145,7 +150,6 @@ class Worker(object):
                     "automatically declare unknown queues you have to "
                     "enable CELERY_CREATE_MISSING_QUEUES" % (
                         self.use_queues, exc))
-        self.queues = self.app.amqp.queues
 
     def init_loader(self):
         self.loader = self.app.loader
@@ -188,6 +192,7 @@ class Worker(object):
         return ""
 
     def startup_info(self):
+        app = self.app
         concurrency = self.concurrency
         if self.autoscale:
             cmax, cmin = self.autoscale
@@ -202,7 +207,7 @@ class Worker(object):
             "celerybeat": "ON" if self.run_clockservice else "OFF",
             "events": "ON" if self.events else "OFF",
             "loader": get_full_cls_name(self.loader.__class__),
-            "queues": self.queues.format(indent=18, indent_first=False),
+            "queues": app.amqp.queues.format(indent=18, indent_first=False),
         }
 
     def run_worker(self):
@@ -220,7 +225,6 @@ class Worker(object):
                                 scheduler_cls=self.scheduler_cls,
                                 send_events=self.events,
                                 db=self.db,
-                                queues=self.queues,
                                 max_tasks_per_child=self.max_tasks_per_child,
                                 task_time_limit=self.task_time_limit,
                                 task_soft_time_limit=self.task_soft_time_limit,
@@ -292,7 +296,6 @@ def install_worker_int_again_handler(worker):
         if multiprocessing:
             process_name = multiprocessing.current_process().name
         if not process_name or process_name == "MainProcess":
-            print("TERMINATING")
             worker.logger.warn("celeryd: Cold shutdown (%s)" % (
                 process_name))
             worker.terminate(in_sighandler=True)

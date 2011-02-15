@@ -222,7 +222,8 @@ class BaseTask(object):
         return self.app.log.setup_task_logger(loglevel=loglevel,
                                               logfile=logfile,
                                               propagate=propagate,
-                            task_kwargs=self.request.get("kwargs"))
+                                              task_name=self.name,
+                                              task_id=self.request.id)
 
     @classmethod
     def establish_connection(self, connect_timeout=None):
@@ -430,7 +431,7 @@ class BaseTask(object):
 
     @classmethod
     def retry(self, args=None, kwargs=None, exc=None, throw=True,
-            **options):
+            eta=None, countdown=None, max_retries=None, **options):
         """Retry the task.
 
         :param args: Positional arguments to retry with.
@@ -473,20 +474,23 @@ class BaseTask(object):
         to convey that the rest of the block will not be executed.
 
         """
-        max_retries = self.max_retries
         request = self.request
-        if args is None:
-            args = request.args
-        if kwargs is None:
-            kwargs = request.kwargs
+        max_retries = self.max_retries if max_retries is None else max_retries
+        args = request.args if args is None else args
+        kwargs = request.kwargs if kwargs is None else kwargs
         delivery_info = request.delivery_info
 
         if delivery_info:
             options.setdefault("exchange", delivery_info.get("exchange"))
             options.setdefault("routing_key", delivery_info.get("routing_key"))
-        countdown = options.setdefault("countdown", self.default_retry_delay)
+
+        if not eta and countdown is None:
+            countdown = self.default_retry_delay
+
         options.update({"retries": request.retries + 1,
-                        "task_id": request.id})
+                        "task_id": request.id,
+                        "countdown": countdown,
+                        "eta": eta})
 
         if max_retries is not None and options["retries"] > max_retries:
             raise exc or self.MaxRetriesExceededError(
@@ -500,7 +504,9 @@ class BaseTask(object):
 
         self.apply_async(args=args, kwargs=kwargs, **options)
         if throw:
-            raise RetryTaskError("Retry in %d seconds" % (countdown, ), exc)
+            raise RetryTaskError(
+                eta and "Retry at %s" % (eta, )
+                    or  "Retry in %s secs." % (countdown, ), exc)
 
     @classmethod
     def apply(self, args=None, kwargs=None, **options):

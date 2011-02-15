@@ -71,8 +71,13 @@ class Polaroid(object):
 
 
 def evcam(camera, freq=1.0, maxrate=None, loglevel=0,
-        logfile=None, timer=None, app=None, pidfile=None):
+        logfile=None, pidfile=None, timer=None, app=None):
     app = app_or_default(app)
+
+    if pidfile:
+        pidlock = platforms.create_pidlock(pidfile).acquire()
+        atexit.register(pidlock.release)
+
     if not isinstance(loglevel, int):
         loglevel = LOG_LEVELS[loglevel.upper()]
     logger = app.log.setup_logger(loglevel=loglevel,
