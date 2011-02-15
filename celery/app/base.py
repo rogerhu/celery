@@ -16,9 +16,11 @@ from contextlib import contextmanager
 from copy import deepcopy
 from functools import wraps
 
+from kombu.utils import cached_property
+
 from celery.app.defaults import DEFAULTS
 from celery.datastructures import ConfigurationView
-from celery.utils import cached_property, instantiate, lpmerge
+from celery.utils import instantiate, lpmerge
 
 
 class BaseApp(object):

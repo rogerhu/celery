@@ -16,6 +16,8 @@ from celery.exceptions import WorkerLostError, RetryTaskError
 from celery.execute.trace import TaskTrace
 from celery.registry import tasks
 from celery.utils import noop, kwdict, truncate_text
+from celery.utils import truncate_text
+from celery.utils.encoding import safe_repr, safe_str
 from celery.utils.timeutils import maybe_iso8601
 from celery.worker import state
 
@@ -49,12 +51,9 @@ class InvalidTaskError(Exception):
     """The task has invalid data or is not properly constructed."""
 
 
-def default_encode(obj):
-    if sys.platform.startswith("java"):
-        coding = "utf-8"
-    else:
-        coding = sys.getfilesystemencoding()
-    return unicode(obj, coding)
+class AlreadyExecutedError(Exception):
+    """Tasks can only be executed once, as they might change
+    world-wide state."""
 
 
 class WorkerTaskTrace(TaskTrace):
@@ -409,7 +408,7 @@ class TaskRequest(object):
 
         runtime = (time.time() - self.time_start) if self.time_start else 0
         self.send_event("task-succeeded", uuid=self.task_id,
-                        result=repr(ret_value), runtime=runtime)
+                        result=safe_repr(ret_value), runtime=runtime)
 
         self.logger.info(self.success_msg.strip() % {
                 "id": self.task_id,
@@ -420,13 +419,13 @@ class TaskRequest(object):
     def on_retry(self, exc_info):
         """Handler called if the task should be retried."""
         self.send_event("task-retried", uuid=self.task_id,
-                                        exception=repr(exc_info.exception.exc),
-                                        traceback=repr(exc_info.traceback))
+                         exception=safe_repr(exc_info.exception.exc),
+                         traceback=safe_repr(exc_info.traceback))
 
         self.logger.info(self.retry_msg.strip() % {
                 "id": self.task_id,
                 "name": self.task_name,
-                "exc": repr(exc_info.exception.exc)})
+                "exc": safe_repr(exc_info.exception.exc)})
 
     def on_failure(self, exc_info):
         """Handler called if the task raised an exception."""
@@ -446,14 +445,14 @@ class TaskRequest(object):
                                                   exc_info.exception)
 
         self.send_event("task-failed", uuid=self.task_id,
-                                       exception=repr(exc_info.exception),
-                                       traceback=exc_info.traceback)
+                         exception=safe_repr(exc_info.exception),
+                         traceback=safe_str(exc_info.traceback))
 
         context = {"hostname": self.hostname,
                    "id": self.task_id,
                    "name": self.task_name,
-                   "exc": repr(exc_info.exception),
-                   "traceback": default_encode(exc_info.traceback),
+                   "exc": safe_repr(exc_info.exception),
+                   "traceback": safe_str(exc_info.traceback),
                    "args": self.args,
                    "kwargs": self.kwargs}
         self.logger.error(self.error_msg.strip() % context,
@@ -485,13 +484,13 @@ class TaskRequest(object):
     def repr_result(self, result, maxlen=46):
         # 46 is the length needed to fit
         #     "the quick brown fox jumps over the lazy dog" :)
-        return truncate_text(repr(result), maxlen)
+        return truncate_text(safe_repr(result), maxlen)
 
     def info(self, safe=False):
         return {"id": self.task_id,
                 "name": self.task_name,
-                "args": self.args     if safe else repr(self.args),
-                "kwargs": self.kwargs if safe else repr(self.kwargs),
+                "args": self.args     if safe else safe_repr(self.args),
+                "kwargs": self.kwargs if safe else safe_repr(self.kwargs),
                 "hostname": self.hostname,
                 "time_start": self.time_start,
                 "acknowledged": self.acknowledged,

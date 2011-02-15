@@ -15,9 +15,11 @@ import threading
 
 from functools import wraps
 
+from kombu.utils import cached_property
+
 from celery import registry
 from celery.app import base
-from celery.utils import cached_property, instantiate
+from celery.utils import instantiate
 
 # Apps with the :attr:`~celery.app.base.BaseApp.set_as_current` attribute
 # sets this, so it will always contain the last instantiated app,
@@ -71,6 +73,7 @@ class App(base.BaseApp):
             ignore_result = conf.CELERY_IGNORE_RESULT
             store_errors_even_if_ignored = \
                 conf.CELERY_STORE_ERRORS_EVEN_IF_IGNORED
+        Task.__doc__ = BaseTask.__doc__
 
         return Task
 

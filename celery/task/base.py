@@ -5,7 +5,6 @@ from celery.schedules import maybe_schedule
 from celery.utils import timeutils
 from celery.app.task import Context, BaseTask, TaskType
 
-
 Task = current_app.Task
 
 

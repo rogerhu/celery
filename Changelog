@@ -5,14 +5,131 @@
 .. contents::
     :local:
 
+.. _version-2.2.4:
+
+2.2.4
+=====
+:release-date: 2011-02-14 11:00 AM CET
+
+* celeryd: 2.2.3 broke error logging, so tracebacks would no longer be logged.
+
+.. _v224-fixes:
+
+.. _version-2.2.3:
+
+2.2.3
+=====
+:release-date: 2011-02-12 16:00 PM CET
+
+.. _v223-fixes:
+
+Fixes
+-----
+
+* Now depends on Kombu 1.0.3
+
+* Task.retry now supports a ``max_retries`` argument, used to change the
+  default value.
+
+* `multiprocessing.cpu_count` may raise :exc:`NotImplementedError` on
+  platforms where this is not supported (Issue #320).
+
+* Coloring of log messages broke if the logged object was not a string.
+
+* Fixed several typos in the init script documentation.
+
+* A regression caused `Task.exchange` and `Task.routing_key` to no longer
+  have any effect.  This is now fixed.
+
+* Routing Userguide: Fixes typo, routers in :setting:`CELERY_ROUTES` must be
+  instances, not classes.
+
+* :program:`celeryev` did not create pidfile even though the
+  :option:`--pidfile` argument was set.
+
+* Task logger format was no longer used. (Issue #317).
+
+   The id and name of the task is now part of the log message again.
+
+* A safe version of ``repr()`` is now used in strategic places to ensure
+  objects with a broken ``__repr__`` does not crash the worker, or otherwise
+  make errors hard to understand (Issue #298).
+
+* Remote control command ``active_queues``: did not account for queues added
+  at runtime.
+
+    In addition the dictionary replied by this command now has a different
+    structure: the exchange key is now a dictionary containing the
+    exchange declaration in full.
+
+* The :option:`-Q` option to :program:`celeryd` removed unused queue
+  declarations, so routing of tasks could fail.
+
+    Queues are no longer removed, but rather `app.amqp.queues.consume_from()`
+    is used as the list of queues to consume from.
+
+    This ensures all queues are available for routing purposes.
+
+* celeryctl: Now supports the `inspect active_queues` command.
+
+.. _version-2.2.2:
+
+2.2.2
+=====
+:release-date: 2011-02-03 16:00 PM CET
+
+.. _v222-fixes:
+
+Fixes
+-----
+
+* Celerybeat could not read the schedule properly, so entries in
+  :setting:`CELERYBEAT_SCHEDULE` would not be scheduled.
+
+* Task error log message now includes `exc_info` again.
+
+* The `eta` argument can now be used with `task.retry`.
+
+    Previously it was overwritten by the countdown argument.
+
+* celeryd-multi/celeryd_detach: Now logs errors occuring when executing
+  the `celeryd` command.
+
+* daemonizing cookbook: Fixed typo ``--time-limit 300`` ->
+  ``--time-limit=300``
+
+* Colors in logging broke non-string objects in log messages.
+
+* ``setup_task_logger`` no longer makes assumptions about magic task kwargs.
+
+.. _version-2.2.1:
+
+2.2.1
+=====
+:release-date: 2011-02-02 16:00 PM CET
+
+.. _v221-fixes:
+
+Fixes
+-----
+
+* Eventlet pool was leaking memory (Issue #308).
+
+* Deprecated function ``celery.execute.delay_task`` was accidentally removed,
+  now available again.
+
+* ``BasePool.on_terminate`` stub did not exist
+
+* celeryd detach: Adds readable error messages if user/group name does not
+   exist.
+
+* Smarter handling of unicode decod errors when logging errors.
+
 .. _version-2.2.0:
 
 2.2.0
 =====
-:release-date: TBA (target end of january)
-:status: release candidate
-:branch: master (http://github.com/ask/celery/tree/master)
-:latest tag: v2.2.0rc5
+:release-date: 2011-02-01 10:00 AM CET
 
 .. _v220-important:
 
@@ -341,7 +458,7 @@ News
     to import schedules without importing the `celery.task` module.
 
 * The following functions have been deprecated and is scheduled for
-  removed in version 2.3:
+  removal in version 2.3:
 
     * `celery.execute.apply_async`
 
@@ -442,9 +559,9 @@ News
 
     .. warning::
 
-        You should increase the polling interval when using the
-        database result backend, as frequent polling can result in high
-        database load.
+        You should decrease the polling interval when using the database
+        result backend, as frequent polling can result in high database load.
+
 
 * The PID of the child worker process accepting a task is now sent as a field
   with the `task-started` event.
@@ -486,14 +603,14 @@ News
 
 * Added signals: `beat_init` and `beat_embedded_init`
 
-    * :data:`celery.signals.beat_init`
+    * :signal:`celery.signals.beat_init`
 
         Dispatched when :program:`celerybeat` starts (either standalone or
         embedded).  Sender is the :class:`celery.beat.Service` instance.
 
-    * :data:`celery.signals.beat_embedded_init`
+    * :signal:`celery.signals.beat_embedded_init`
 
-        Dispatched in addition to the :data:`beat_init` signal when
+        Dispatched in addition to the :signal:`beat_init` signal when
         :program:`celerybeat` is started as an embedded process.  Sender
         is the :class:`celery.beat.Service` instance.
 
@@ -1005,7 +1122,7 @@ News
     Unless you configure the loggers manually as shown below, that is.
 
     *Users can choose to configure logging by subscribing to the
-    :data:`~celery.signals.setup_logging` signal:*
+    :signal:`~celery.signals.setup_logging` signal:*
 
     .. code-block:: python
 
@@ -2162,7 +2279,7 @@ News
 * `apply(throw=True)` / :setting:`CELERY_EAGER_PROPAGATES_EXCEPTIONS`:
   Makes eager execution re-raise task errors.
 
-* New signal: :data:`~celery.signals.worker_process_init`: Sent inside the
+* New signal: :signal:`~celery.signals.worker_process_init`: Sent inside the
   pool worker process at init.
 
 * celeryd :option:`-Q` option: Ability to specify list of queues to use,
