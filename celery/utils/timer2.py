@@ -77,8 +77,6 @@ class Schedule(object):
             if not self.handle_error(sys.exc_info()):
                 raise
 
-        print("ETA IS %r" % (eta, ))
-
         if eta is None:
             # schedule now.
             eta = time()

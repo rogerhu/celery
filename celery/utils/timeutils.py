@@ -34,6 +34,9 @@ class UnknownTimezone(Exception):
 
 class _Zone(object):
 
+    def now(self):
+        return datetime.now(self.local)
+
     def to_local(self, dt, tzinfo=None):
         if tzinfo is None:
             tzinfo = self.local

@@ -262,12 +262,11 @@ class TaskRequest(object):
         if self.task.ignore_result:
             self._store_errors = self.task.store_errors_even_if_ignored
 
-        print("ETA IS %s" % (self.eta, ))
+        tzinfo = self.app.conf.CELERY_TIMEZONE
         if self.eta is not None:
-            self.eta = timezone.to_local(self.eta)
-        print("ETA XS %s" % (self.eta, ))
+            self.eta = timezone.to_local(self.eta, tzinfo=tzinfo)
         if self.expires is not None:
-            self.expires = timezone.to_local(self.expires)
+            self.expires = timezone.to_local(self.expires, tzinfo=tzinfo)
 
     @classmethod
     def from_message(cls, message, body, on_ack=noop, **kw):
@@ -349,7 +348,7 @@ class TaskRequest(object):
 
     def maybe_expire(self):
         """If expired, mark the task as revoked."""
-        if self.expires and datetime.utcnow() > self.expires:
+        if self.expires and timezone.now() > self.expires:
             state.revoked.add(self.task_id)
             if self._store_errors:
                 self.task.backend.mark_as_revoked(self.task_id)

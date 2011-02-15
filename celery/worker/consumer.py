@@ -266,8 +266,9 @@ class Consumer(object):
                 if self.qos.prev != self.qos.value:
                     self.qos.update()
                 self.connection.drain_events()
+        except Exception:
+            raise
         except BaseException, exc:
-            print("EXCEPTION: %r" % (exc, ))
             raise SystemExit()
 
     def on_task(self, task):
