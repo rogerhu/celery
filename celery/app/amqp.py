@@ -22,6 +22,9 @@ from celery.utils import gen_unique_id, textindent
 from celery.utils import promise, maybe_promise
 from celery.utils.compat import UserDict
 
+# UTC timezone mark.
+TZ_UTC = 0x1
+
 #: List of known options to a Kombu producers send method.
 #: Used to extract the message related options out of any `dict`.
 MSG_OPTIONS = ("mandatory", "priority", "immediate", "routing_key",
@@ -220,7 +223,8 @@ class TaskPublisher(messaging.Publisher):
                 "kwargs": task_kwargs or {},
                 "retries": retries or 0,
                 "eta": eta,
-                "expires": expires}
+                "expires": expires,
+                "tz": TZ_UTC}
         if taskset_id:
             body["taskset"] = taskset_id
 

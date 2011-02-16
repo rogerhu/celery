@@ -19,7 +19,8 @@ RATE_MODIFIER_MAP = {"s": lambda n: n,
                      "m": lambda n: n / 60.0,
                      "h": lambda n: n / 60.0 / 60.0}
 
-HAVE_TIMEDELTA_TOTAL_SECONDS = hasattr(timedelta, "total_seconds")
+
+HAS_TIMEDELTA_TOTAL_SECONDS = hasattr(timedelta, "total_seconds")
 
 TIME_UNITS = (("day", 60 * 60 * 24, lambda n: int(math.ceil(n))),
               ("hour", 60 * 60, lambda n: int(math.ceil(n))),
@@ -32,26 +33,29 @@ class UnknownTimezone(Exception):
     installing the pytz library to get access to more timezones."""
 
 
+def _is_naive(dt):
+    return bool(dt.tzinfo)
+
+
 class _Zone(object):
 
-    def now(self):
-        return datetime.now(self.local)
-
-    def to_local(self, dt, tzinfo=None):
+    def tz_or_local(self, tzinfo=None):
         if tzinfo is None:
-            tzinfo = self.local
-        if isinstance(tzinfo, basestring):
-            tzinfo = self.get_timezone(tzinfo)
+            return self.local
+        return self.get_timezone(tzinfo)
 
-        d = dt.replace(tzinfo=self.utc)
-        return d.astimezone(tzinfo)
+    def to_local(self, dt, local=None, orig=None):
+        return dt.replace(tzinfo=orig or self.utc).astimezone(
+                    self.tz_or_local(local))
 
-    def get_timezone(self, name):
-        if pytz:
-            return pytz.timezone(name)
-        zone = tz.gettz(name)
-        if zone is None:
-            raise UnknownTimezone(UnknownTimezone.__doc__)
+    def get_timezone(self, zone):
+        if isinstance(zone, basestring):
+            if pytz:
+                return pytz.timezone(zone)
+            zone = tz.gettz(zone)
+            if zone is None:
+                raise UnknownTimezone(UnknownTimezone.__doc__)
+            return zone
         return zone
 
     @cached_property
@@ -79,7 +83,7 @@ def timedelta_seconds(delta):  # pragma: no cover
     Doesn't account for negative values.
 
     """
-    if HAVE_TIMEDELTA_TOTAL_SECONDS:
+    if HAS_TIMEDELTA_TOTAL_SECONDS:
         # Should return 0 for negative seconds
         return max(delta.total_seconds(), 0)
     if delta.days < 0:
@@ -123,7 +127,7 @@ def remaining(start, ends_in, now=None, relative=True):
         defaults to :func:`datetime.now`.
 
     """
-    now = now or datetime.now()
+    now = now or datetime.utcnow()
 
     end_date = start + ends_in
     if not relative:

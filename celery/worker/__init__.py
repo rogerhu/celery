@@ -252,9 +252,9 @@ class WorkController(object):
         except SystemTerminate:
             self.terminate()
             raise SystemExit()
-        except BaseException, exc:
+        except BaseException:
             self.stop()
-            raise exc
+            raise
 
     def process_task(self, request):
         """Process task by sending it to the pool of workers."""

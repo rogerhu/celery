@@ -238,8 +238,8 @@ class TaskRequest(object):
 
     def __init__(self, task_name, task_id, args, kwargs,
             on_ack=noop, retries=0, delivery_info=None, hostname=None,
-            email_subject=None, email_body=None, logger=None,
-            eventer=None, eta=None, expires=None, app=None, **opts):
+            email_subject=None, email_body=None, logger=None, eventer=None,
+            eta=None, expires=None, app=None, tz=0x1, **opts):
         self.app = app_or_default(app)
         self.task_name = task_name
         self.task_id = task_id
@@ -255,17 +255,21 @@ class TaskRequest(object):
         self.eventer = eventer
         self.email_subject = email_subject or self.email_subject
         self.email_body = email_body or self.email_body
+        self.timezone = timezone
 
         self.task = tasks[self.task_name]
         self._store_errors = True
         if self.task.ignore_result:
             self._store_errors = self.task.store_errors_even_if_ignored
 
-        tzinfo = self.app.conf.CELERY_TIMEZONE
+        # timezone means the message is timezone-aware, and the only timezone
+        # supported at this point is UTC.
+        self.tzlocal = timezone.tz_or_local(self.app.conf.CELERY_TIMEZONE)
+        tz = tz and timezone.utc or self.tzlocal
         if self.eta is not None:
-            self.eta = timezone.to_local(self.eta, tzinfo=tzinfo)
+            self.eta = timezone.to_local(self.eta, self.tzlocal, tz)
         if self.expires is not None:
-            self.expires = timezone.to_local(self.expires, tzinfo=tzinfo)
+            self.expires = timezone.to_local(self.expires, self.tzlocal, tz)
 
     @classmethod
     def from_message(cls, message, body, on_ack=noop, **kw):
@@ -292,6 +296,7 @@ class TaskRequest(object):
                    expires=maybe_iso8601(body.get("expires")),
                    on_ack=on_ack,
                    delivery_info=delivery_info,
+                   tz=body.get("tz", None),
                    **kw)
 
     def get_instance_attrs(self, loglevel, logfile):
@@ -347,7 +352,7 @@ class TaskRequest(object):
 
     def maybe_expire(self):
         """If expired, mark the task as revoked."""
-        if self.expires and timezone.now() > self.expires:
+        if self.expires and datetime.now(self.tzlocal) > self.expires:
             state.revoked.add(self.task_id)
             if self._store_errors:
                 self.task.backend.mark_as_revoked(self.task_id)
