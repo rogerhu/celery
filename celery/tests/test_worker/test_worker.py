@@ -349,14 +349,14 @@ class test_Consumer(unittest.TestCase):
         l.event_dispatcher = MockEventDispatcher()
         l.pidbox_node = MockNode()
 
-        from celery.worker import consumer
-        prev, consumer.to_timestamp = consumer.to_timestamp, to_timestamp
+        from celery.utils import timer2
+        prev, timer2.to_timestamp = timer2.to_timestamp, to_timestamp
         try:
             l.receive_message(m.decode(), m)
             self.assertTrue(m.acknowledged)
             self.assertTrue(called[0])
         finally:
-            consumer.to_timestamp = prev
+            timer2.to_timestamp = prev
 
     def test_receive_message_InvalidTaskError(self):
         logger = MockLogger()
@@ -450,8 +450,9 @@ class test_Consumer(unittest.TestCase):
         l.task_consumer = Consumer()
         l.broadcast_consumer = Consumer()
         l.qos = QoS(l.task_consumer, 10, l.logger)
-
+        print("CONSUME1")
         l.consume_messages()
+        print("CONSUME2")
         l.consume_messages()
         self.assertTrue(l.task_consumer.consuming)
         self.assertTrue(l.broadcast_consumer.consuming)

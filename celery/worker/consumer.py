@@ -78,7 +78,7 @@ from celery.datastructures import AttributeDict
 from celery.exceptions import NotRegistered
 from celery.utils import noop
 from celery.utils.encoding import safe_repr
-from celery.utils.timer2 import to_timestamp
+from celery.utils import timer2
 from celery.worker import state
 from celery.worker.job import TaskRequest, InvalidTaskError
 from celery.worker.control.registry import Panel
@@ -219,7 +219,7 @@ class Consumer(object):
         self.logger = logger
         self.hostname = hostname or socket.gethostname()
         self.initial_prefetch_count = initial_prefetch_count
-        self.priority_timer = priority_timer
+        self.priority_timer = priority_timer or timer2.Timer()
         self.event_dispatcher = None
         self.heart = None
         self.pool = pool
@@ -263,6 +263,8 @@ class Consumer(object):
             self.logger.debug("Consumer: Ready to accept tasks!")
 
             while 1:
+                if self.connection is None:
+                    return
                 if self.qos.prev != self.qos.value:
                     self.qos.update()
                 self.connection.drain_events()
@@ -292,7 +294,7 @@ class Consumer(object):
 
         if task.eta:
             try:
-                eta = to_timestamp(task.eta)
+                eta = timer2.to_timestamp(task.eta)
             except OverflowError, exc:
                 self.logger.error(
                     "Couldn't convert eta %s to timestamp: %r. Task: %r" % (

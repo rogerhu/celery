@@ -129,7 +129,7 @@ class test_TaskPool(unittest.TestCase):
 
         pool = TaskPool(10)
         exc = KeyError("foo")
-        pool.on_worker_error([errback], exc)
+        pool.on_worker_error(errback, exc)
 
         self.assertTrue(scratch[0])
         self.assertIs(scratch[0].exception, exc)
@@ -179,7 +179,7 @@ class test_TaskPool(unittest.TestCase):
     def test_on_ready_exit_exception(self):
         pool = TaskPool(10)
         exc = to_excinfo(SystemExit("foo"))
-        self.assertRaises(SystemExit, pool.on_ready, [], [], exc)
+        self.assertRaises(SystemExit, pool.on_ready, None, None, exc)
 
     def test_apply_async(self):
         pool = TaskPool(10)

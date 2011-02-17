@@ -24,7 +24,7 @@ class Autoscaler(object):
         current = min(self.qty, self.max_concurrency)
         if current > self.processes:
             self.scale_up(current - self.processes)
-        elif current < self.processes:
+        elif self._last_action and current < self.processes:
             self.scale_down((self.processes - current) - self.min_concurrency)
 
     def scale_up(self, n):
