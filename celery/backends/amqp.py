@@ -6,6 +6,7 @@ import socket
 import time
 
 from datetime import timedelta
+from itertools import count
 
 from kombu.entity import Exchange, Queue
 from kombu.messaging import Consumer, Producer
@@ -14,6 +15,10 @@ from celery import states
 from celery.backends.base import BaseDictBackend
 from celery.exceptions import TimeoutError
 from celery.utils import timeutils
+
+
+class BacklogLimitExceeded(Exception):
+    """Too much state history to fast-forward."""
 
 
 def repair_uuid(s):
@@ -29,6 +34,8 @@ class AMQPBackend(BaseDictBackend):
     Queue = Queue
     Consumer = Consumer
     Producer = Producer
+
+    BacklogLimitExceeded = BacklogLimitExceeded
 
     _pool = None
     _pool_owner_pid = None
@@ -111,8 +118,6 @@ class AMQPBackend(BaseDictBackend):
         return result
 
     def get_task_meta(self, task_id, cache=True):
-        if cache and task_id in self._cache:
-            return self._cache[task_id]
         return self.poll(task_id)
 
     def wait_for(self, task_id, timeout=None, cache=True, propagate=True,
@@ -137,13 +142,19 @@ class AMQPBackend(BaseDictBackend):
         else:
             return self.wait_for(task_id, timeout, cache)
 
-    def poll(self, task_id):
+    def poll(self, task_id, backlog_limit=100):
         with self.pool.acquire_channel(block=True) as (conn, channel):
             binding = self._create_binding(task_id)(channel)
             binding.declare()
-            result = binding.get()
-            if result:
-                payload = self._cache[task_id] = result.payload
+            latest, acc = None, None
+            for i in count():  # fast-forward
+                latest, acc = acc, binding.get(no_ack=True)
+                if not acc:
+                    break
+                if i > backlog_limit:
+                    raise self.BacklogLimitExceeded(task_id)
+            if latest:
+                payload = self._cache[task_id] = latest.payload
                 return payload
             elif task_id in self._cache:  # use previously received state.
                 return self._cache[task_id]

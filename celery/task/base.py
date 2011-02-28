@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-"
+from __future__ import absolute_import
 
 from celery import current_app
 from celery.schedules import maybe_schedule
