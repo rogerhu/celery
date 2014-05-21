@@ -1,5 +1,6 @@
 from __future__ import absolute_import, print_function, unicode_literals
 
+
 import platform
 import random
 import socket
@@ -20,7 +21,7 @@ from celery.utils.timeutils import humanize_seconds
 
 from .app import (
     marker, _marker, add, any_, exiting, kill, sleeping,
-    sleeping_ignore_limits, segfault, any_returning,
+    sleeping_ignore_limits, segfault, any_returning, ok
 )
 from .data import BIG, SMALL
 from .fbi import FBI
@@ -109,11 +110,11 @@ class Suite(object):
             ),
             'green': testgroup(
                 self.manyshort,
-                self.bigtasks,
-                self.bigtasksbigvalue,
-                self.smalltasks,
-                self.alwaysexits,
-                self.group_with_exit,
+                # self.bigtasks,
+                # self.bigtasksbigvalue,
+                # self.smalltasks,
+                # self.alwaysexits,
+                # self.group_with_exit,
             ),
         }
 
@@ -122,12 +123,13 @@ class Suite(object):
             diag=False, no_join=False, **kw):
         self.no_join = no_join
         self.fbi.enable(diag)
+
         tests = self.filtertests(group, names)[offset:numtests or None]
         if list_all:
             return print(self.testlist(tests))
         print(self.banner(tests))
         print('+ Enabling events')
-        self.app.control.enable_events()
+#        self.app.control.enable_events()
         it = count() if repeat == Inf else range(int(repeat) or 1)
         for i in it:
             marker(
@@ -168,10 +170,23 @@ class Suite(object):
         )
 
     def manyshort(self):
-        self.join(group(add.s(i, i) for i in range(1000))(),
-                  timeout=10, propagate=True)
+        from datetime import datetime
+
+        while 1:
+            print(datetime.now())
+
+            [r.get(propagate=False) for r in [ok.delay() for i in range(200)]]
+            import time
+            time.sleep(2)
+#        self.join(group(add.s(i, i) for i in range(1000))(),
+#                  timeout=10, propagate=True)
 
     def runtest(self, fun, n=50, index=0, repeats=1):
+        try:
+            fun()
+        except StopSuite:
+            raise
+        return
         print('{0}: [[[{1}({2})]]]'.format(repeats, fun.__name__, n))
         with blockdetection(self.block_timeout):
             with self.fbi.investigation():
@@ -308,3 +323,8 @@ class Suite(object):
 
     def dump_progress(self):
         return pstatus(self.progress) if self.progress else 'No test running'
+
+import billiard
+from logging import DEBUG
+billiard.log_to_stderr(DEBUG)
+
