@@ -50,33 +50,11 @@ class App(Celery):
             self.after_configure(ret)
         return ret
 
-    # def on_configure(self):
-    #     if not self.template_selected:
-    #         self.use_template('default')
+    def on_configure(self):
+         if not self.template_selected:
+             self.use_template('default')
 
-from logging import getLogger, DEBUG
-logger = getLogger(__name__)
-import billiard
-billiard.log_to_stderr(level=DEBUG)
-
-from celery import Celery
-celery = Celery()
-
-#app = App('stress')
-app = celery
-
-celery.conf.update(
-    BROKER_URL="redis://localhost:6379/1",
-    CELERY_RESULT_BACKEND="redis://localhost:6379/2",
-    CELERY_TASK_SERIALIZER="pickle",
-    CELERY_RESULT_SERIALIZER="pickle",
-    CELERY_EVENT_SERIALIZER="pickle",
-    CELERY_ACCEPT_CONTENT=['pickle', 'json', 'msgpack', 'yaml'],
-    CELERYD_MAX_TASKS_PER_CHILD=2,
-    CELERY_DISABLE_RATE_LIMITS=True,
-#    CELERY_QUEUES=CELERY_QUEUES
-)
-
+app = App('stress')
 
 
 
