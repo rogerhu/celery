@@ -182,6 +182,11 @@ class Suite(object):
 #                  timeout=10, propagate=True)
 
     def runtest(self, fun, n=50, index=0, repeats=1):
+        try:
+            fun()
+        except StopSuite:
+             raise
+        return
         print('{0}: [[[{1}({2})]]]'.format(repeats, fun.__name__, n))
         with blockdetection(self.block_timeout):
             with self.fbi.investigation():
