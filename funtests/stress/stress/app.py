@@ -117,13 +117,8 @@ def retries(self):
 
 
 @app.task
-def unicode():
+def print_unicode():
     print('hiöäüß')
-
-
-@app.task
-def ok():
-    return "ok"
 
 
 @app.task
