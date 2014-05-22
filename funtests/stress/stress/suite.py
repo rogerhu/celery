@@ -110,11 +110,11 @@ class Suite(object):
             ),
             'green': testgroup(
                 self.manyshort,
-                # self.bigtasks,
-                # self.bigtasksbigvalue,
-                # self.smalltasks,
-                # self.alwaysexits,
-                # self.group_with_exit,
+                self.bigtasks,
+                self.bigtasksbigvalue,
+                self.smalltasks,
+                self.alwaysexits,
+                self.group_with_exit,
             ),
         }
 
